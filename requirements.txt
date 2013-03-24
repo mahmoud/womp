@@ -1,0 +1,8 @@
+-e git+https://github.com/mahmoud/wapiti.git#egg=wapiti
+cssselect>=0.7.1
+lxml>=3.0
+pyquery>=1.2.1
+python-dateutil>=2.1
+greenlet>=0.4.0
+-e git+https://github.com/SiteSupport/gevent.git#egg=gevent-dev
+psutil>=0.6.0
