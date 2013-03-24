@@ -3,6 +3,23 @@
 # C extensions
 *.so
 
+.DS_Store
+.*.swp
+*~
+._*
+.\#*
+\#*\#
+*.csv
+*.json
+log*
+fetch.log
+article_html/*.html
+*.tab
+*.swp
+
+*.sublime-project
+*.sublime-workspace
+
 # Packages
 *.egg
 *.egg-info
