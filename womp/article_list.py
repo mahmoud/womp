@@ -3,12 +3,9 @@ from __future__ import unicode_literals
 import os
 import json
 import codecs
-from functools import wraps
 from datetime import datetime
 from collections import namedtuple
 from argparse import ArgumentParser
-
-#from lib import wapiti
 
 DEFAULT_LIMIT = 100
 DEFAULT_SOURCE = 'enwiki'
@@ -32,17 +29,22 @@ class ArticleListManager(object):
             self._home_path = self.env.list_home
         self._wapiti_client = None
 
-    def lookup(self, filename):
+    def lookup(self, filename, raise_exc=False):
         if not filename:
-            return None
+            return None  # TODO: raise exc here? who uses this?
         search_dir = self._home_path
+        target_path = None
         if os.path.isdir(search_dir):
             if os.path.isfile(filename):
-                return os.path.join(search_dir, filename)
+                target_path = os.path.join(search_dir, filename)
             elif os.path.isfile(filename + DEFAULT_EXT):
-                return os.path.join(search_dir, filename + DEFAULT_EXT)
+                target_path = os.path.join(search_dir, filename + DEFAULT_EXT)
         if os.path.isfile(filename):
-            return filename
+            target_path = filename
+        if target_path:
+            return ArticleList.from_file(target_path)
+        if raise_exc:
+            raise IOError('file not found for target list: %s' % target_list)
         return None
 
     def get_full_list(self):
@@ -65,17 +67,18 @@ class ArticleListManager(object):
         if self.env:
             self.env.get_wapiti_client()
         else:
-            return DEFAULT_CLIENT  # (default env or client?)
+            # testing only, I think
+            from wapiti import WapitiClient
+            self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
+            return self._wapiti_client
 
-    def list_op(self, op_name, search_target, target_list, limit=DEFAULT_LIMIT, recursive=False, **kw):
-        target_list = os.path.join(self.output_path, target_list + DEFAULT_EXT)
-        if not target_list:
-            raise IOError('file not found for target list: %s' % target_list)
-        a_list = ArticleList.from_file(target_list)
+    def list_op(self, op_name, search_target, target_list, limit=None, **kw):
+        target_list = self.lookup(target_list, raise_exc=True)
+        wc = self.wapiti_client
         if search_target.startswith('Category:'):
-            article_list = wapiti.get_category_recursive(search_target, page_limit=limit)
+            article_list = wc.get_category_recursive(search_target, limit)
         elif search_target.startswith('Template:'):
-            article_list = wapiti.get_transcluded(page_title=search_target, limit=limit, to_zero_ns=True)
+            article_list = wc.get_transcluded(search_target, limit)
 
         if op_name == 'include':
             a_list.include([a[2] for a in article_list], source=DEFAULT_SOURCE, term=search_target)
@@ -87,12 +90,11 @@ class ArticleListManager(object):
         # TODO: tests
 
     def show(self, target_list=None, **kw):
-        target_list_path = self.lookup(target_list)
-        if target_list_path:
-            a_list = ArticleList.from_file(target_list_path)
-            print json.dumps(a_list.file_metadata, indent=4)
-            print '\nTotal articles: ', len(a_list.get_articles()), '\n'
-        elif target_list is None:
+        article_list = self.lookup(target_list)
+        if article_list:
+            print json.dumps(article_list.file_metadata, indent=4)
+            print '\nTotal articles: ', len(article_list.get_articles()), '\n'
+        elif article_list is None:
             print 'Article lists in', self._home_path
             print '\n'.join(self.get_full_list())
 
