@@ -2,11 +2,12 @@ from __future__ import unicode_literals
 import os
 from os.path import join as pjoin
 import shutil
-
 import ConfigParser
 from argparse import ArgumentParser
 
-#import article_list
+from wapiti import WapitiClient
+
+import article_list
 #import fetch
 
 _DEFAULT_DIR_PERMS = 0755
@@ -19,6 +20,8 @@ class WompEnv(object):
         self.config = config
         self.path = path
 
+        self.list_manager = article_list.ArticleListManager(self)
+
     @classmethod
     def from_path(cls, path=None, config_name=_CONF_NAME):
         path = path or os.getenv('WOMP_HOME') or os.getcwd()
@@ -30,8 +33,6 @@ class WompEnv(object):
 
     @classmethod
     def init_new(cls, path):
-        if not isinstance(path, basestring):
-            path = path[0]  # friggin nargs=1
         path = os.path.normpath(path)
         if os.path.exists(path):
             # TODO: force?
@@ -48,8 +49,15 @@ class WompEnv(object):
         return cls.from_path(path)
 
     @property
-    def lists_home(self):
+    def list_home(self):
         return pjoin(self.path, 'article_lists')
+
+    def get_wapiti_client(self):
+        if self._wapiti_client:
+            return self._wapiti_client
+        email = self.config.get('user', 'email')
+        self._wapiti_client = WapitiClient(email)
+        return self._wapiti_client
 
 
 def _init_default_config(path):
@@ -68,14 +76,17 @@ def create_parser():
     subprs = prs.add_subparsers()
 
     prs_init = subprs.add_parser('init')
+    prs_init.set_defaults(subparser_name='init')
     prs_init.add_argument('path', nargs=1,
                           help='path of new womp home directory')
-    prs_init.set_defaults(func=init_home)
+    prs_init.set_defaults(func_name='init_new')
 
-    #prs_list = subprs.add_parser('list')
-    #article_list.add_subparsers(prs_list.add_subparsers())
+    prs_list = subprs.add_parser('list')
+    prs_list.set_defaults(subparser_name='list')
+    article_list.add_subparsers(prs_list.add_subparsers())
 
     #prs_fetch = subprs.add_parser('fetch')
+    #prs_fetch.set_defaults(subparser_name='fetch')
     #fetch.add_subparsers(prs_fetch.add_subparsers())
 
     return prs
@@ -85,12 +96,17 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     kwargs = dict(args._get_kwargs())
-    if args.func is not init_home:
+    subparser_name = kwargs.pop('subparser_name')
+    func_name = kwargs.pop('func_name')
+    if func_name == 'init_new':
+        path = kwargs['path'][0]  # friggin nargs=1
+        WompEnv.init_new(path)
+    else:
         womp_env = WompEnv.from_path(kwargs['home'])
-        if not kwargs.get('list_home'):
-            kwargs['list_home'] = womp_env.lists_home
-    args.func(**kwargs)
-
+        if subparser_name == 'list':
+            getattr(womp_env.list_manager, func_name)(**kwargs)
+        else:
+            raise ValueError('unrecognized subparser: %r' % subparser_name)
 
 if __name__ == '__main__':
     try:

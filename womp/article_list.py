@@ -22,51 +22,48 @@ ArticleIdentifier = namedtuple('ArticleIdentifier', 'name source')
 
 
 class ArticleListManager(object):
-    def __init__(self, search_path=None, env=None):
-        if search_path is None:
-            default_path = os.getenv('WOMP_LIST_HOME') or os.getcwd()
-            search_path = [default_path]
-        self.search_path = search_path
-        self._output_path = None
-        self.env = env
+    def __init__(self, env_or_path=None):
+        if not env_or_path or isinstance(env_or_path, basestring):
+            self.env = None
+            defpath = env_or_path or os.getenv('WOMP_LIST_HOME') or os.getcwd()
+            self._home_path = defpath
+        else:
+            self.env = env_or_path
+            self._home_path = self.env.list_home
         self._wapiti_client = None
 
     def lookup(self, filename):
         if not filename:
             return None
-        for search_dir in self.search_path:
-            if os.path.isdir(search_dir):
-                if os.path.isfile(filename):
-                    return os.path.join(search_dir, filename)
-                elif os.path.isfile(filename + DEFAULT_EXT):
-                    return os.path.join(search_dir, filename + DEFAULT_EXT)
+        search_dir = self._home_path
+        if os.path.isdir(search_dir):
+            if os.path.isfile(filename):
+                return os.path.join(search_dir, filename)
+            elif os.path.isfile(filename + DEFAULT_EXT):
+                return os.path.join(search_dir, filename + DEFAULT_EXT)
         if os.path.isfile(filename):
             return filename
         return None
 
     def get_full_list(self):
         ret = []
-        for search_dir in self.search_path:
-            try:
-                ret.extend([fn for fn in os.listdir(search_dir)
-                            if fn.endswith(DEFAULT_EXT)])
-            except IOError:
-                pass
+        try:
+            ret.extend([fn for fn in os.listdir(self._home_path)
+                        if fn.endswith(DEFAULT_EXT)])
+        except IOError:
+            pass
         return ret
 
     @property
     def output_path(self):
-        if self._output_path:
-            return self._output_path
-        else:
-            return self.search_path[0]
+        return self._home_path
 
     @property
     def wapiti_client(self):
         if self._wapiti_client:
             return self._wapiti_client
         if self.env:
-            return self.env.get_wapiti_client()
+            self.env.get_wapiti_client()
         else:
             return DEFAULT_CLIENT  # (default env or client?)
 
@@ -96,7 +93,7 @@ class ArticleListManager(object):
             print json.dumps(a_list.file_metadata, indent=4)
             print '\nTotal articles: ', len(a_list.get_articles()), '\n'
         elif target_list is None:
-            print 'Article lists in ', repr(self.search_path)
+            print 'Article lists in', self._home_path
             print '\n'.join(self.get_full_list())
 
     def create(self, target_list, **kw):
@@ -308,13 +305,6 @@ def al_parse(contents):
     return ret_actions, comments, file_metadata
 
 
-def create_parser():
-    root_parser = ArgumentParser(description='article list operations')
-    root_parser.add_argument('--list_home', help='list lookup directory')
-    add_subparsers(root_parser.add_subparsers())
-    return root_parser
-
-
 def add_subparsers(subparsers):
     parser_show = subparsers.add_parser('show')
     parser_show.add_argument('target_list', nargs='?',
@@ -348,16 +338,24 @@ def add_subparsers(subparsers):
     return
 
 
+def create_parser():
+    """
+    Only called when article_list is used directly (i.e., when there
+    is no WompEnv).
+    """
+    root_parser = ArgumentParser(description='article list operations')
+    root_parser.add_argument('--list_home', help='list lookup directory')
+    add_subparsers(root_parser.add_subparsers())
+    return root_parser
+
+
 def main():
     parser = create_parser()
     args = parser.parse_args()
     kwargs = dict(args._get_kwargs())
 
-    search_path = None
     list_home = kwargs.pop('list_home', None)
-    if list_home:
-        search_path = [list_home]
-    alm = ArticleListManager(search_path)
+    alm = ArticleListManager(list_home)
 
     func_name = kwargs.pop('func_name')
     getattr(alm, func_name)(**kwargs)
