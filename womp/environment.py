@@ -92,10 +92,22 @@ def create_parser():
     return prs
 
 
+def get_decoded_kwargs(args):
+    import sys
+    kwargs = dict(args._get_kwargs())
+    for k, v in kwargs.items():
+        if not isinstance(v, unicode):
+            try:
+                kwargs[k] = v.decode(sys.stdin.encoding)
+            except AttributeError:
+                pass
+    return kwargs
+
+
 def main():
     parser = create_parser()
     args = parser.parse_args()
-    kwargs = dict(args._get_kwargs())
+    kwargs = get_decoded_kwargs(args)
     subparser_name = kwargs.pop('subparser_name')
     func_name = kwargs.pop('func_name')
     if func_name == 'init_new':
@@ -111,6 +123,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except BaseException as e:
+    except Exception as e:
         import pdb;pdb.post_mortem()
         raise
