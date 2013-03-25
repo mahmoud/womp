@@ -32,8 +32,18 @@ class ArticleListManager(object):
     def lookup(self, filename, raise_exc=False):
         if not filename:
             return None  # TODO: raise exc here? who uses this?
+        filename_path = self.lookup_path(filename)
+        if filename_path:
+            return ArticleList.from_file(filename_path)
+        if raise_exc:
+            raise IOError('file not found for target list: %s' % filename)
+
+    def lookup_path(self, filename, raise_exc=False):
+        if not filename:
+            return None  # TODO: raise exc here? who uses this?
         search_dir = self._home_path
         target_path = None
+        filename = filename + DEFAULT_EXT
         if os.path.isdir(search_dir):
             if os.path.isfile(filename):
                 target_path = os.path.join(search_dir, filename)
@@ -42,7 +52,7 @@ class ArticleListManager(object):
         if os.path.isfile(filename):
             target_path = filename
         if target_path:
-            return ArticleList.from_file(target_path)
+            return target_path
         if raise_exc:
             raise IOError('file not found for target list: %s' % target_list)
         return None
@@ -72,20 +82,37 @@ class ArticleListManager(object):
             self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
             return self._wapiti_client
 
-    def list_op(self, op_name, search_target, target_list, limit=None, **kw):
-        target_list = self.lookup(target_list, raise_exc=True)
+    def list_op(self, op_name, target_list, operation_list, limit=None, *a, **kw):
+        if op_name not in ListAction.valid_actions:
+            raise ValueError('invalid list operation %r' % op_name)
+        # argparse can't decode unicode?
+        target_list_name = target_list
+        target_list = self.lookup(target_list_name, raise_exc=True)
         wc = self.wapiti_client
-        if search_target.startswith('Category:'):
-            article_list = wc.get_category_recursive(search_target, limit)
-        elif search_target.startswith('Template:'):
-            article_list = wc.get_transcluded(search_target, limit)
-
-        if op_name == 'include':
-            a_list.include([a[2] for a in article_list], source=DEFAULT_SOURCE, term=search_target)
-            a_list.write(target_list)
-        elif op_name == 'exclude':
-            a_list.exclude([a[2] for a in article_list], source=DEFAULT_SOURCE, term=search_target)
-            a_list.write(target_list)
+        try:
+            wapiti_operation, wapiti_param = operation_list
+        except (ValueError, TypeError):
+            search_target = operation_list[0]
+            if search_target.startswith('Category:'):
+                wapiti_operation = 'get_category_recursive'
+                wapiti_param = search_target
+            elif search_target.startswith('Template:'):
+                wapiti_operation = 'get_transcluded'
+                wapiti_param = search_target
+            else:
+                wapiti_operation = search_target
+                wapiti_param = None
+        try:
+            op = getattr(wc, wapiti_operation)
+        except AttributeError:
+            print 'No wapiti operation', wapiti_operation
+            return
+        if wapiti_param:
+            page_infos = op(wapiti_param, limit=limit)
+        else:
+            page_infos = op(limit=limit)
+        target_list.append_action(op_name, operation_list, page_infos, wc.api_url)
+        target_list.write(self.lookup_path(target_list_name))
         # TODO: summary
         # TODO: tests
 
@@ -93,7 +120,7 @@ class ArticleListManager(object):
         article_list = self.lookup(target_list)
         if article_list:
             print json.dumps(article_list.file_metadata, indent=4)
-            print '\nTotal articles: ', len(article_list.get_articles()), '\n'
+            print '\nTotal articles: ', len(article_list._get_articles()), '\n'
         elif article_list is None:
             print 'Article lists in', self._home_path
             print '\n'.join(self.get_full_list())
@@ -140,32 +167,25 @@ class ArticleList(object):
                                          datetime.strftime(date, DATE_FORMAT))
         name = self.file_metadata.get('name', '(unknown)')
         format = self.file_metadata.get('format', FORMAT)
-        tmpl = '# created={created} name={name} format={format}'
+        tmpl = '# created={created} name={name} format={format}\n'
         return tmpl.format(created=created, name=name, format=format)
 
     @property
     def titles(self):
-        return [a.name for a in self.get_articles()]
+        return [a.name for a in self._get_articles()]
 
-    def include(self, article_list, term=None, source=None):
-        self.do_action('include', article_list, term=term, source=source)
+    def __len__(self):
+        return len(self._get_articles())
 
-    def exclude(self, article_list, term=None, source=None):
-        self.do_action('exclude', article_list, term=term, source=source)
-
-    def xor(self):
-        # todo
+    def append_action(self, action, operation_list, page_infos, source):
+        new_action = ListAction(action=action,
+                                articles=page_infos,
+                                term=operation_list,
+                                source=source)
+        self.actions.append(new_action)
         pass
 
-    def do_action(self, action, article_list, term=None, source=None):
-        newact = ListAction(id=self.next_action_id,
-                            action=action,
-                            articles=article_list,
-                            term=term,
-                            source=source)
-        self.actions.append(newact)
-
-    def get_articles(self):
+    def _get_articles(self):
         article_set = set()
         for action in self.actions:
             action_articles = set([ArticleIdentifier(a, action.source)
@@ -182,12 +202,11 @@ class ArticleList(object):
         #todo: file metadata
         output = []
         i = 0
+        ret = self.file_metadata_string
         for action in self.actions:
-            meta_str = action.get_meta_string()
-            output.append(meta_str)
-            output += action.articles
-
-        ret = [self.file_metadata_string]
+            ret += action.to_string()
+        return ret
+        '''
         ai = 0
         for i in xrange(len(self.comments) + len(output)):
             if self.comments.get(i) is not None:
@@ -196,26 +215,32 @@ class ArticleList(object):
                 ret.append(output[ai])
                 ai += 1
         return '\n'.join(ret)
+        '''
+
+    def len_unresolved(self):
+        ret = 0
+        for action in self.actions:
+            ret += action.len_unresolved()
+        return ret
 
     def write(self, path):
+        # should write be on ArticleListManager
         output = self.to_string()
         with codecs.open(path, 'w', encoding='utf-8') as f:
             f.write(output)
 
 
 class ListAction(object):
-    metadata_attrs = ('id', 'action', 'term', 'date', 'source')
+    metadata_attrs = ('action', 'term', 'date', 'source')
     valid_actions = ('include', 'exclude')
 
     def __init__(self,
-                 id,
                  action,
                  articles=None,
                  term=None,
                  date=None,
                  source=None,
                  extra_attrs=None):
-        self.id = id
         self.action = action
         self.term = term or '(custom)'
         if date is None:
@@ -232,7 +257,7 @@ class ListAction(object):
         self.articles = articles
 
     @classmethod
-    def from_meta_string(cls, string, default_id=1, default_action='include'):
+    def from_meta_string(cls, string, default_action='include'):
         metadata = parse_meta_string(string)
         extra_attrs = {}
         kw = {}
@@ -243,8 +268,6 @@ class ListAction(object):
                 extra_attrs[k] = metadata[k]
         if not kw:
             raise ValueError('no metadata found')
-        if not kw.get('id'):
-            kw['id'] = default_id
         if not kw.get('action'):
             kw['action'] = default_action
         if kw['action'] not in cls.valid_actions:
@@ -261,6 +284,24 @@ class ListAction(object):
             ret += str(attr) + '=' + str(attrval) + ' '
         return ret
 
+    def to_string(self):
+        ret = self.get_meta_string() + '\n'
+        tmpl = u'({title}, {id}, {ns}, {subject_id}, {talk_id})\n'
+        # if not page infos, get page info
+        for article in self.articles:
+            try:
+                ret += tmpl.format(title=article.title,
+                                   id=article.page_id,
+                                   ns=article.ns,
+                                   subject_id=article.subject_id,
+                                   talk_id=article.talk_id)
+            except AttributeError:
+                ret += article
+        return ret
+
+    def len_unresolved(self):
+        return len([a for a in self.articles if isinstance(a, basestring)])
+
 
 def parse_meta_string(string_orig):
     ret = {}
@@ -269,6 +310,7 @@ def parse_meta_string(string_orig):
     for part in parts:
         k, _, v = part.partition('=')
         ret[k] = v
+    import pdb; pdb.set_trace()
     return ret
 
 
@@ -284,16 +326,16 @@ def al_parse(contents):
             comments[i] = ''
             continue
         if line.startswith("#"):
-            default_id = len(ret_actions) + 1
+            # remove action id
             try:
-                list_action = ListAction.from_meta_string(line,
-                                                          default_id)
+                list_action = ListAction.from_meta_string(line)
             except ValueError:
                 if not ret_actions:
                     try:
                         file_metadata = parse_meta_string(line)
                         continue
                     except:
+                        import pdb;pdb.set_trace
                         pass
                 comments[i] = line
             else:
@@ -301,42 +343,50 @@ def al_parse(contents):
                 ret_actions.append(list_action)
         else:
             if not cur_action:
-                cur_action = ListAction(1, 'include')
+                # no action metadata
+                cur_action = ListAction('include')
                 ret_actions.append(cur_action)
             cur_action.articles.append(line)
     return ret_actions, comments, file_metadata
 
 
 def add_subparsers(subparsers):
+    # womp list show
     parser_show = subparsers.add_parser('show')
     parser_show.add_argument('target_list', nargs='?',
                              help='Name of the list or list file')
     parser_show.set_defaults(func_name='show')
 
+    # womp list create *listname
     parser_create = subparsers.add_parser('create')
     parser_create.add_argument('target_list',
                                help='name of the list or list file')
     parser_create.set_defaults(func_name='create')
 
+    # womp list *arg *listname *wapitisource
     op_parser = ArgumentParser(description='parses generic search op args.',
                                add_help=False)
-    op_parser.add_argument('search_target',
-                           help='article, category, or template')
     op_parser.add_argument('target_list',
                            help='name or path of article list')
+    op_parser.add_argument('operation_list', nargs='*',
+                           help='article, category, or template')
     op_parser.add_argument('--limit', '-l', type=int,
                            default=DEFAULT_LIMIT,
                            help='number of articles')
-    op_parser.add_argument('--recursive', '-R', action='store_true',
-                           help='Fetch recursively')
     op_parser.set_defaults(func_name='list_op')
 
+    # actions
     parser_include = subparsers.add_parser('include', parents=[op_parser])
     parser_include.set_defaults(op_name='include')
-
     parser_exclude = subparsers.add_parser('exclude', parents=[op_parser])
     parser_exclude.set_defaults(op_name='exclude')
-
+    '''
+    # someday
+    parser_intersect = subparsers.add_parser('intersect', parents=[op_parser])
+    parser_intersect.set_defaults(op_name='intersect')
+    parser_xor = subparsers.add_parser('xor', parents=[op_parser])
+    parser_xor.set_defaults(op_name='xor')
+    '''
     return
 
 
@@ -364,4 +414,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except:
+        import pdb;pdb.post_mortem()
+        raise
