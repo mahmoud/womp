@@ -14,8 +14,35 @@ FORMAT = 'v1'
 ###########
 DATE_FORMAT = '%Y-%m-%dT%H:%M:%S'
 DEFAULT_EXT = '.txt'
+TEST_LIST_NAME = 'test_list'
 
-ArticleIdentifier = namedtuple('ArticleIdentifier', 'name source')
+PageInfo = namedtuple('PageInfo', 'title page_id ns subject_id talk_id')
+UnresolvedPage = namedtuple('UnresolvedPage', 'title')
+
+
+def get_max_width(table, index):
+    """Get the maximum width of the given column index"""
+    return max([len(str(row[index])) for row in table])
+
+
+def pprint_table(table):
+    """Prints out a table of data, padded for alignment
+    @param out: Output stream (file-like object)
+    @param table: The table to print. A list of lists.
+    Each row must have the same number of columns. """
+    col_paddings = []
+
+    for i in range(len(table[0])):
+        col_paddings.append(get_max_width(table, i))
+
+    for row in table:
+        # left col
+        print str(row[0]).ljust(col_paddings[0] + 1),
+        # rest of the cols
+        for i in range(1, len(row)):
+            col = str(row[i]).rjust(col_paddings[i] + 2)
+            print col,
+        print
 
 
 class ArticleListManager(object):
@@ -54,13 +81,13 @@ class ArticleListManager(object):
         if target_path:
             return target_path
         if raise_exc:
-            raise IOError('file not found for target list: %s' % target_list)
+            raise IOError('file not found for target list: %s' % filename)
         return None
 
     def get_full_list(self):
         ret = []
         try:
-            ret.extend([fn for fn in os.listdir(self._home_path)
+            ret.extend([fn.rstrip(DEFAULT_EXT) for fn in os.listdir(self._home_path)
                         if fn.endswith(DEFAULT_EXT)])
         except IOError:
             pass
@@ -82,7 +109,12 @@ class ArticleListManager(object):
             self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
             return self._wapiti_client
 
-    def list_op(self, op_name, target_list, operation_list, limit=None, *a, **kw):
+    def list_op(self,
+                op_name,
+                target_list,
+                operation_list,
+                limit=None,
+                *a, **kw):
         if op_name not in ListAction.valid_actions:
             raise ValueError('invalid list operation %r' % op_name)
         # argparse can't decode unicode?
@@ -112,9 +144,20 @@ class ArticleListManager(object):
         else:
             page_infos = op(limit=limit)
         target_list.append_action(op_name, operation_list, page_infos, wc.api_url)
-        target_list.write(self.lookup_path(target_list_name))
-        # TODO: summary
-        # TODO: tests
+        self.write(target_list, target_list_name)
+        print 'List:', target_list_name + ';'
+        print target_list.summarize()
+
+    def resolve_the_unresolved(self, target_list):
+        wc = self.wapiti_client
+        t_list = self.lookup(target_list)
+        for a, action in enumerate(t_list.actions):
+            for i, article in enumerate(action.articles):
+                if isinstance(article, UnresolvedPage):
+                    # TODO: batch?
+                    t_list.actions[a].articles[i] = wc.get_page_info(article.title)[0]
+                    pass
+        self.write(t_list, target_list)
 
     def show(self, target_list=None, **kw):
         article_list = self.lookup(target_list)
@@ -122,8 +165,22 @@ class ArticleListManager(object):
             print json.dumps(article_list.file_metadata, indent=4)
             print '\nTotal articles: ', len(article_list._get_articles()), '\n'
         elif article_list is None:
+            article_lists = self.get_full_list()
+            als = [['Articles', 'Unresolved', 'Actions', 'Updated', 'Name']]
+            for article_list_name in article_lists:
+                article_list = self.lookup(article_list_name)
+                if getattr(article_list, 'actions', None):
+                    als.append([len(article_list._get_articles()),
+                                len(article_list._get_unresolved_articles()),
+                                len(article_list.actions),
+                                article_list.file_metadata.get('date', 'new'),
+                                article_list_name
+                                ])
             print 'Article lists in', self._home_path
-            print '\n'.join(self.get_full_list())
+            if len(als) > 1:
+                pprint_table(als)
+            else:
+                print 'none'
 
     def create(self, target_list, **kw):
         existent = self.lookup(target_list)
@@ -135,6 +192,13 @@ class ArticleListManager(object):
         out_filename = os.path.join(self.output_path, target_list + DEFAULT_EXT)
         codecs.open(out_filename, 'w', encoding='utf-8').close()
         print 'Created article list %s' % out_filename
+
+    def write(self, target_list, list_name):
+        # should write be on ArticleListManager
+        output = target_list.to_string()
+        full_path = self.lookup_path(list_name)
+        with codecs.open(full_path, 'w', encoding='utf-8') as f:
+            f.write(output)
 
 
 class ArticleList(object):
@@ -162,13 +226,13 @@ class ArticleList(object):
 
     @property
     def file_metadata_string(self):
-        date = datetime.utcnow()
-        created = self.file_metadata.get('created',
-                                         datetime.strftime(date, DATE_FORMAT))
-        name = self.file_metadata.get('name', '(unknown)')
-        format = self.file_metadata.get('format', FORMAT)
-        tmpl = '# created={created} name={name} format={format}\n'
-        return tmpl.format(created=created, name=name, format=format)
+        now = datetime.utcnow().strftime(DATE_FORMAT)
+        ret = u'###'
+        ret_dict = {'date': now,
+                    'created': self.file_metadata.get('created', now),
+                    'name': self.file_metadata.get('name', '(unknown)'),
+                    'format': self.file_metadata.get('format', FORMAT)}
+        return ret + json.dumps(ret_dict) + u'\n'
 
     @property
     def titles(self):
@@ -188,8 +252,7 @@ class ArticleList(object):
     def _get_articles(self):
         article_set = set()
         for action in self.actions:
-            action_articles = set([ArticleIdentifier(a, action.source)
-                                    for a in action.articles])
+            action_articles = set(action.articles)
             if action.action == 'include':
                 article_set = article_set.union(action_articles)
             elif action.action == 'exclude':
@@ -198,36 +261,23 @@ class ArticleList(object):
                 raise Exception('wut')
         return article_set
 
+    def _get_unresolved_articles(self):
+        all_articles = self._get_articles()
+        return [a for a in all_articles if isinstance(a, UnresolvedPage)]
+
     def to_string(self):
         #todo: file metadata
-        output = []
-        i = 0
         ret = self.file_metadata_string
         for action in self.actions:
             ret += action.to_string()
         return ret
-        '''
-        ai = 0
-        for i in xrange(len(self.comments) + len(output)):
-            if self.comments.get(i) is not None:
-                ret.append(self.comments[i])
-            else:
-                ret.append(output[ai])
-                ai += 1
-        return '\n'.join(ret)
-        '''
 
-    def len_unresolved(self):
-        ret = 0
-        for action in self.actions:
-            ret += action.len_unresolved()
-        return ret
-
-    def write(self, path):
-        # should write be on ArticleListManager
-        output = self.to_string()
-        with codecs.open(path, 'w', encoding='utf-8') as f:
-            f.write(output)
+    def summarize(self):
+        desc = (len(self._get_articles()),
+                len(self._get_unresolved_articles()),
+                len(self.actions),
+                self.file_metadata.get('date', 'new'))
+        return 'Total: %s;\nUnresolved: %s;\nActions: %s;\nDate: %s;' % desc
 
 
 class ListAction(object):
@@ -276,92 +326,99 @@ class ListAction(object):
         return cls(**kw)
 
     def get_meta_string(self):
-        ret = '# '
+        ret = u'##'
+        ret_dict = {}
         for attr in self.metadata_attrs:
-            attrval = getattr(self, attr)
-            if hasattr(attrval, 'strftime'):
-                attrval = attrval.strftime(DATE_FORMAT)
-            ret += str(attr) + '=' + str(attrval) + ' '
-        return ret
+            ret_dict[attr] = getattr(self, attr)
+            if hasattr(ret_dict[attr], 'strftime'):
+                ret_dict[attr] = ret_dict[attr].strftime(DATE_FORMAT)
+        return ret + json.dumps(ret_dict) + '\n'
 
     def to_string(self):
-        ret = self.get_meta_string() + '\n'
-        tmpl = u'({title}, {id}, {ns}, {subject_id}, {talk_id})\n'
+        ret = self.get_meta_string()
         # if not page infos, get page info
         for article in self.articles:
-            try:
-                ret += tmpl.format(title=article.title,
-                                   id=article.page_id,
-                                   ns=article.ns,
-                                   subject_id=article.subject_id,
-                                   talk_id=article.talk_id)
-            except AttributeError:
-                ret += article
+            ret += print_page_info(article)
         return ret
-
-    def len_unresolved(self):
-        return len([a for a in self.articles if isinstance(a, basestring)])
 
 
 def parse_meta_string(string_orig):
-    ret = {}
-    string = string_orig.strip().lstrip('#').strip()
-    parts = string.split()
-    for part in parts:
-        k, _, v = part.partition('=')
-        ret[k] = v
-    import pdb; pdb.set_trace()
+    string = string_orig.strip()
+    try:
+        ret = json.loads(string)
+    except ValueError:
+        pass  # invalid meta string
+    return ret
+
+
+def print_page_info(pi):
+    if isinstance(pi, UnresolvedPage):
+        ret = pi.title
+    else:
+        ret = json.dumps((pi.title, pi.page_id, pi.ns, pi.subject_id, pi.talk_id))
+    return ret + u'\n'
+
+
+def parse_page_info(raw_pi):
+    try:
+        title, page_id, ns, subject_id, talk_id = json.loads(raw_pi)
+        ret = PageInfo(title, page_id, ns, subject_id, talk_id)
+    except ValueError:
+        ret = UnresolvedPage(raw_pi)
     return ret
 
 
 def al_parse(contents):
     lines = contents.splitlines()
     file_metadata = ''
-    cur_action = None
     ret_actions = []
     comments = {}
     for i, orig_line in enumerate(lines):
         line = orig_line.strip()
         if not line:
             comments[i] = ''
-            continue
-        if line.startswith("#"):
-            # remove action id
-            try:
-                list_action = ListAction.from_meta_string(line)
-            except ValueError:
-                if not ret_actions:
-                    try:
-                        file_metadata = parse_meta_string(line)
-                        continue
-                    except:
-                        import pdb;pdb.set_trace
-                        pass
-                comments[i] = line
-            else:
-                cur_action = list_action
-                ret_actions.append(list_action)
+        elif line.startswith(u'###'):
+            file_metadata = parse_meta_string(line.lstrip('###'))
+        elif line.startswith(u'##'):
+            ret_actions.append(ListAction.from_meta_string(line.lstrip('##')))
+        elif line.startswith('#'):
+            comments[i] = line.lstrip('#')
         else:
-            if not cur_action:
+            if not ret_actions:
                 # no action metadata
-                cur_action = ListAction('include')
-                ret_actions.append(cur_action)
-            cur_action.articles.append(line)
+                ret_actions.append(ListAction('include'))
+            try:
+                page = parse_page_info(line)
+            except ValueError:
+                pass  # cannot parse line?
+            ret_actions[-1].articles.append(page)
     return ret_actions, comments, file_metadata
 
 
 def add_subparsers(subparsers):
     # womp list show
-    parser_show = subparsers.add_parser('show')
+    parser_show = subparsers.add_parser('show',
+                                        help='print information about \
+                                        available lists')
     parser_show.add_argument('target_list', nargs='?',
                              help='Name of the list or list file')
     parser_show.set_defaults(func_name='show')
 
     # womp list create *listname
-    parser_create = subparsers.add_parser('create')
+    parser_create = subparsers.add_parser('create',
+                                          help='create a new list for \
+                                          article storage')
     parser_create.add_argument('target_list',
                                help='name of the list or list file')
     parser_create.set_defaults(func_name='create')
+
+    # womp list create *listname
+    parser_create = subparsers.add_parser('resolve',
+                                          help='fetch page infos \
+                                          unresolved pages (not implemented)')
+    parser_create.add_argument('target_list',
+                               help='name of the list or list file')
+    parser_create.set_defaults(func_name='resolve_the_unresolved')
 
     # womp list *arg *listname *wapitisource
     op_parser = ArgumentParser(description='parses generic search op args.',
@@ -370,15 +427,18 @@ def add_subparsers(subparsers):
                            help='name or path of article list')
     op_parser.add_argument('operation_list', nargs='*',
                            help='article, category, or template')
-    op_parser.add_argument('--limit', '-l', type=int,
-                           default=DEFAULT_LIMIT,
-                           help='number of articles')
+    op_parser.add_argument('--limit', '-l', type=int, help='number of articles',
+                           default=DEFAULT_LIMIT)
     op_parser.set_defaults(func_name='list_op')
 
     # actions
-    parser_include = subparsers.add_parser('include', parents=[op_parser])
+    parser_include = subparsers.add_parser('include', parents=[op_parser],
+                                           help='add articles to the list from\
+                                           wapiti operations')
     parser_include.set_defaults(op_name='include')
-    parser_exclude = subparsers.add_parser('exclude', parents=[op_parser])
+    parser_exclude = subparsers.add_parser('exclude', parents=[op_parser],
+                                           help='exclude articles to the list from\
+                                           wapiti operations')
     parser_exclude.set_defaults(op_name='exclude')
     '''
     # someday
@@ -411,6 +471,62 @@ def main():
 
     func_name = kwargs.pop('func_name')
     getattr(alm, func_name)(**kwargs)
+
+
+def create_test():
+    alm = ArticleListManager()
+    try:
+        os.remove(alm.lookup_path(TEST_LIST_NAME))
+    except TypeError:
+        pass
+    alm.create(target_list=TEST_LIST_NAME)
+    return ArticleListManager()
+
+
+def test_create_alm():
+    alm = create_test()
+    return len(alm.lookup(TEST_LIST_NAME).actions) == 0
+
+
+def test_include_list_op():
+    alm = create_test()
+    alm.list_op(op_name='include',
+                target_list=TEST_LIST_NAME,
+                operation_list=['get_category', 'Physics'],
+                limit=20)
+    return len(alm.lookup(TEST_LIST_NAME).actions[0].articles) == 20
+
+
+def test_exclude_list_op():
+    alm = create_test()
+    alm.list_op(op_name='include',
+                target_list=TEST_LIST_NAME,
+                operation_list=['get_category', 'Physics'],
+                limit=50)
+    alm.list_op(op_name='exclude',
+                target_list=TEST_LIST_NAME,
+                operation_list=['get_category', 'Physics'],
+                limit=30)
+    ret = alm.lookup(TEST_LIST_NAME)._get_articles()
+    return len(ret) < 50 and len(ret) >= 20
+
+
+def test_show():
+    alm = create_test()
+    try:
+        alm.show()
+        return True
+    except:
+        return False
+
+
+def _main():
+    tests = [f for f in globals() if f.startswith('test_')]
+    results = {}
+    for k in tests:
+        results[k] = globals()[k]()
+    from pprint import pprint
+    pprint(results)
 
 
 if __name__ == '__main__':
