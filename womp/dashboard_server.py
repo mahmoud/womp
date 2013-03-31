@@ -29,7 +29,6 @@ def article_list():
     return {'article_lists': alm.get_list_dicts()}
 
 
-
 def input_server(input_name, title):
     wc = WapitiClient('testing')
     if not title:

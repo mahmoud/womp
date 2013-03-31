@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
 import os
+import sys
 import time
 import json
 import codecs
@@ -9,6 +10,7 @@ monkey.patch_all()
 from gevent import pool
 from gevent.greenlet import Greenlet
 from gevent.threadpool import ThreadPool
+from argparse import ArgumentParser
 from wapiti import WapitiClient
 from article_list import ArticleListManager
 from dashboard_server import start_dashboard_server
@@ -67,14 +69,14 @@ class FetchManager(object):
 
     def load_list(self, name):
         self.name = name
-        article_list = self.alm.lookup(name)
+        article_list = self.alm.load_list(name)
         self.articles = article_list._get_articles()
 
     def run(self, **kwargs):
         self.dashboard = kwargs.pop('dashboard', True)
         self.start_time = time.time()
         print 'Booting up wapiti...'
-        self.wapiti_client = WapitiClient('makuro@makuro.org')
+        self.wapiti_client = WapitiClient('makuro@makuro.org')  # todo: config
         if self.dashboard:
             print 'Spawning dashboard...'
             tpool = ThreadPool(2)
@@ -209,9 +211,67 @@ class FetchTask(Greenlet):
             ret['total'] = time.time() - self.times['create']
         return ret
 
-if __name__ == '__main__':
+
+def add_subparsers(subparsers):
+    parser_fetch = subparsers.add_parser('fetch')
+    parser_fetch.add_argument('target_list_name', nargs='?',
+                              help='Name of the list or list file')
+    parser_fetch.add_argument('--save', help='save fetch results',
+                              action='store_true')
+    parser_fetch.add_argument('--no_pdb', help='end with pdb',
+                              action='store_true')
+    parser_fetch.add_argument('--no_dashboard', help='do not spawn dashboard',
+                              action='store_true')
+    parser_fetch.set_defaults(func=arg_fetch_list)
+    return
+
+
+def create_parser():
+    """
+    Only called when fetch is used directly (i.e., when there
+    is no WompEnv).
+    """
+    root_parser = ArgumentParser(description='article fetch')
+    root_parser.add_argument('--list_home', help='list lookup directory')
+    add_subparsers(root_parser.add_subparsers())
+    return root_parser
+
+
+def arg_fetch_list(target_list_name,
+                   list_home=None,
+                   save=False,
+                   no_pdb=False,
+                   no_dashboard=False):
+    dashboard = True
+    if no_dashboard:
+        dashboard = False
+    fm = FetchManager(list_home)
+    fm.load_list(target_list_name)
+    fm.run(dashboard=dashboard)
+    if save:
+        fm.write()
+    if not no_pdb:  # double negative for easier cli
+        import pdb; pdb.set_trace()
+
+
+def main():
+    parser = create_parser()
+    if len(sys.argv) == 1:
+        parser.print_help()
+        print ''
+    args = parser.parse_args()
+    kwargs = dict(args._get_kwargs())
+    func_name = kwargs.pop('func')
+    func_name(**kwargs)
+
+
+def _main():
     fm = FetchManager()
     fm.load_list('test_coffee')
     test_page = [f for f in fm.articles][0]
     fm.run()
     import pdb; pdb.set_trace()
+
+
+if __name__ == '__main__':
+    main()

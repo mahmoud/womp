@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
-import os, sys
+import os
+import sys
 import json
 import codecs
 from datetime import datetime
@@ -56,16 +57,25 @@ class ArticleListManager(object):
             self._home_path = self.env.list_home
         self._wapiti_client = None
 
-    def lookup(self, filename, raise_exc=False):
+    def load_list(self, filename, raise_exc=False):
         if not filename:
             return None  # TODO: raise exc here? who uses this?
-        filename_path = self.lookup_path(filename)
+        filename_path = self._lookup_path(filename)
         if filename_path:
             return ArticleList.from_file(filename_path)
         if raise_exc:
             raise IOError('file not found for target list: %s' % filename)
 
-    def lookup_path(self, filename, raise_exc=False):
+    def get_list_dict(self, filename):
+        article_list = self.load_list(filename)
+        ret = {'total': len(article_list._get_articles()),
+               'unresolved': len(article_list._get_unresolved_articles()),
+               'actions': len(article_list.actions),
+               'date': article_list.file_metadata.get('date', 'new'),
+               'name': filename}
+        return ret
+
+    def _lookup_path(self, filename, raise_exc=False):
         if not filename:
             return None  # TODO: raise exc here? who uses this?
         search_dir = self._home_path
@@ -93,17 +103,11 @@ class ArticleListManager(object):
             pass
         return ret
 
-    def get_list_dicts(self):
+    def get_all_list_dicts(self):
         als = []
         article_lists = self._get_full_list()
         for article_list_name in article_lists:
-            article_list = self.lookup(article_list_name)
-            als.append({'total': len(article_list._get_articles()),
-                        'unresolved': len(article_list._get_unresolved_articles()),
-                        'actions': len(article_list.actions),
-                        'date': article_list.file_metadata.get('date', 'new'),
-                        'name': article_list_name
-                        })
+            als.append(self.get_list_dict(article_list_name))
         return als
 
     @property
@@ -132,7 +136,7 @@ class ArticleListManager(object):
             raise ValueError('invalid list operation %r' % op_name)
         # argparse can't decode unicode?
         target_list_name = target_list
-        target_list = self.lookup(target_list_name, raise_exc=True)
+        target_list = self.load_list(target_list_name, raise_exc=True)
         wc = self.wapiti_client
         try:
             wapiti_operation, wapiti_param = operation_list
@@ -163,7 +167,7 @@ class ArticleListManager(object):
 
     def resolve_the_unresolved(self, target_list):
         wc = self.wapiti_client
-        t_list = self.lookup(target_list)
+        t_list = self.load_list(target_list)
         for a, action in enumerate(t_list.actions):
             for i, article in enumerate(action.articles):
                 if isinstance(article, UnresolvedPage):
@@ -173,12 +177,12 @@ class ArticleListManager(object):
         self.write(t_list, target_list)
 
     def show(self, target_list=None, **kw):
-        article_list = self.lookup(target_list)
+        article_list = self.load_list(target_list)
         if article_list:
             print json.dumps(article_list.file_metadata, indent=4)
             print '\nTotal articles: ', len(article_list._get_articles()), '\n'
         elif article_list is None:
-            article_lists = self.get_list_dicts()
+            article_lists = self.get_all_list_dicts()
             als = [['Articles', 'Unresolved', 'Actions', 'Updated', 'Name']]
             for al in article_lists:
                 als.append([al['total'],
@@ -193,7 +197,7 @@ class ArticleListManager(object):
                 print 'none'
 
     def create(self, target_list, **kw):
-        existent = self.lookup(target_list)
+        existent = self.load_list(target_list)
         if existent:
             raise IOError('list already exists: %s' % target_list)
         if not target_list or '.' in target_list:
@@ -206,7 +210,7 @@ class ArticleListManager(object):
     def write(self, target_list, list_name):
         # should write be on ArticleListManager
         output = target_list.to_string()
-        full_path = self.lookup_path(list_name)
+        full_path = self._lookup_path(list_name)
         with codecs.open(full_path, 'w', encoding='utf-8') as f:
             f.write(output)
 
@@ -489,7 +493,7 @@ def main():
 def create_test():
     alm = ArticleListManager()
     try:
-        os.remove(alm.lookup_path(TEST_LIST_NAME))
+        os.remove(alm._lookup_path(TEST_LIST_NAME))
     except TypeError:
         pass
     alm.create(target_list=TEST_LIST_NAME)
@@ -498,7 +502,7 @@ def create_test():
 
 def test_create_alm():
     alm = create_test()
-    return len(alm.lookup(TEST_LIST_NAME).actions) == 0
+    return len(alm.load_list(TEST_LIST_NAME).actions) == 0
 
 
 def test_include_list_op():
@@ -507,7 +511,7 @@ def test_include_list_op():
                 target_list=TEST_LIST_NAME,
                 operation_list=['get_category', 'Physics'],
                 limit=20)
-    return len(alm.lookup(TEST_LIST_NAME).actions[0].articles) == 20
+    return len(alm.load_list(TEST_LIST_NAME).actions[0].articles) == 20
 
 
 def test_exclude_list_op():
@@ -520,7 +524,7 @@ def test_exclude_list_op():
                 target_list=TEST_LIST_NAME,
                 operation_list=['get_category', 'Physics'],
                 limit=30)
-    ret = alm.lookup(TEST_LIST_NAME)._get_articles()
+    ret = alm.load_list(TEST_LIST_NAME)._get_articles()
     return len(ret) < 50 and len(ret) >= 20
 
 
@@ -529,6 +533,15 @@ def test_show():
     try:
         alm.show()
         return True
+    except:
+        return False
+
+
+def test_load_list():
+    alm = create_test()
+    try:
+        test_list_data = alm.get_list_dict(TEST_LIST_NAME)
+        return test_list_data['total'] == 0
     except:
         return False
 
@@ -544,7 +557,7 @@ def _main():
 
 if __name__ == '__main__':
     try:
-        main()
+        _main()
     except:
         import pdb;pdb.post_mortem()
         raise
