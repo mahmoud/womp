@@ -557,7 +557,7 @@ def _main():
 
 if __name__ == '__main__':
     try:
-        _main()
+        main()
     except:
         import pdb;pdb.post_mortem()
         raise
