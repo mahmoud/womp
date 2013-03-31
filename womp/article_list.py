@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 
-import os
+import os, sys
 import json
 import codecs
 from datetime import datetime
@@ -84,14 +84,27 @@ class ArticleListManager(object):
             raise IOError('file not found for target list: %s' % filename)
         return None
 
-    def get_full_list(self):
+    def _get_full_list(self):
         ret = []
         try:
-            ret.extend([fn.rstrip(DEFAULT_EXT) for fn in os.listdir(self._home_path)
+            ret.extend([fn.rsplit(DEFAULT_EXT, 1)[0] for fn in os.listdir(self._home_path)
                         if fn.endswith(DEFAULT_EXT)])
         except IOError:
             pass
         return ret
+
+    def get_list_dicts(self):
+        als = []
+        article_lists = self._get_full_list()
+        for article_list_name in article_lists:
+            article_list = self.lookup(article_list_name)
+            als.append({'total': len(article_list._get_articles()),
+                        'unresolved': len(article_list._get_unresolved_articles()),
+                        'actions': len(article_list.actions),
+                        'date': article_list.file_metadata.get('date', 'new'),
+                        'name': article_list_name
+                        })
+        return als
 
     @property
     def output_path(self):
@@ -165,17 +178,14 @@ class ArticleListManager(object):
             print json.dumps(article_list.file_metadata, indent=4)
             print '\nTotal articles: ', len(article_list._get_articles()), '\n'
         elif article_list is None:
-            article_lists = self.get_full_list()
+            article_lists = self.get_list_dicts()
             als = [['Articles', 'Unresolved', 'Actions', 'Updated', 'Name']]
-            for article_list_name in article_lists:
-                article_list = self.lookup(article_list_name)
-                if getattr(article_list, 'actions', None):
-                    als.append([len(article_list._get_articles()),
-                                len(article_list._get_unresolved_articles()),
-                                len(article_list.actions),
-                                article_list.file_metadata.get('date', 'new'),
-                                article_list_name
-                                ])
+            for al in article_lists:
+                als.append([al['total'],
+                            al['unresolved'],
+                            al['actions'],
+                            al['date'],
+                            al['name']])
             print 'Article lists in', self._home_path
             if len(als) > 1:
                 pprint_table(als)
@@ -463,6 +473,9 @@ def create_parser():
 
 def main():
     parser = create_parser()
+    if len(sys.argv) == 1:
+        parser.print_help()
+        print ''
     args = parser.parse_args()
     kwargs = dict(args._get_kwargs())
 
