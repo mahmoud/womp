@@ -352,9 +352,16 @@ def create_parser():
 
 
 def main():
+    import sys
     parser = create_parser()
     args = parser.parse_args()
     kwargs = dict(args._get_kwargs())
+    for k, v in kwargs.items():
+        if not isinstance(v, unicode):
+            try:
+                kwargs[k] = v.decode(sys.stdin.encoding)
+            except AttributeError:
+                pass
 
     list_home = kwargs.pop('list_home', None)
     alm = ArticleListManager(list_home)
