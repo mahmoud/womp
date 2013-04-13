@@ -6,7 +6,6 @@ import time
 import json
 import codecs
 from gevent import monkey
-monkey.patch_all()
 from gevent import pool
 from gevent.greenlet import Greenlet
 from gevent.threadpool import ThreadPool
@@ -15,6 +14,7 @@ from wapiti import WapitiClient
 from article_list import ArticleListManager
 from dashboard_server import start_dashboard_server
 from inputs import DEFAULT_INPUTS
+monkey.patch_all()
 
 DEFAULT_EXT = '.fetch_data'
 DEFAULT_CONC = 20
@@ -70,10 +70,11 @@ class FetchManager(object):
     def load_list(self, name):
         self.name = name
         article_list = self.alm.load_list(name)
-        self.articles = article_list._get_articles()
+        self.articles = article_list.get_articles()
 
     def run(self, **kwargs):
         self.dashboard = kwargs.pop('dashboard', True)
+        self.dashboard_port = kwargs.pop('port', None)
         self.start_time = time.time()
         print 'Booting up wapiti...'
         self.wapiti_client = WapitiClient('makuro@makuro.org')  # todo: config

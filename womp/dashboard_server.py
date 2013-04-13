@@ -69,7 +69,8 @@ def fetch_task_dashboard(fetch_manager):
            'start_time': time.strftime("%d %b %Y %H:%M:%S UTC", time.gmtime(fetch_manager.start_time)),
            'duration': time.time() - fetch_manager.start_time,
            'fetch_failures': fetch_failures,
-           'process_failures': process_failures
+           'process_failures': process_failures,
+           'name': fetch_manager.name,
            }
     return ret
 
@@ -81,10 +82,16 @@ routes = [('/input_list', input_list, 'list.html'),
 
 def start_dashboard_server(fetch_manager):
     static_path = os.path.join(os.getcwd(), 'templates', 'assets')
+    if not fetch_manager.dashboard_port:
+        fetch_manager.dashboard_port = 5000
     resources = {'fetch_manager': fetch_manager}
     routes.append(('/dashboard', fetch_task_dashboard, 'dashboard.html'))
+    routes.append(('/dashboard/json', fetch_task_dashboard, json_response))
     app = Application(routes, resources, mako_render)
-    app.serve(use_reloader=False, static_prefix='static', static_path=static_path)
+    app.serve(use_reloader=False,
+              static_prefix='static',
+              port=fetch_manager.dashboard_port,
+              static_path=static_path)
 
 if __name__ == '__main__':
     app = Application(routes, render_factory=mako_render)

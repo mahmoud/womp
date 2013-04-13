@@ -68,7 +68,7 @@ class ArticleListManager(object):
 
     def get_list_dict(self, filename):
         article_list = self.load_list(filename)
-        ret = {'total': len(article_list._get_articles()),
+        ret = {'total': len(article_list.get_articles()),
                'unresolved': len(article_list._get_unresolved_articles()),
                'actions': len(article_list.actions),
                'date': article_list.file_metadata.get('date', 'new'),
@@ -126,6 +126,14 @@ class ArticleListManager(object):
             self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
             return self._wapiti_client
 
+    def append_action(self, listname, meta_str, articles):
+        new_article_list = self.load_list(listname)
+        new_action = ListAction.from_meta_string(meta_str)
+        new_action.articles.extend(articles)
+        new_article_list.actions.append(new_action)
+        self.write(new_article_list, listname)
+        return
+
     def list_op(self,
                 op_name,
                 target_list,
@@ -172,15 +180,18 @@ class ArticleListManager(object):
             for i, article in enumerate(action.articles):
                 if isinstance(article, UnresolvedPage):
                     # TODO: batch?
-                    t_list.actions[a].articles[i] = wc.get_page_info(article.title)[0]
-                    pass
+                    try:
+                        t_list.actions[a].articles[i] = wc.get_page_info(article.title)[0]
+                    except IndexError:
+                        # no wapiti result
+                        t_list.actions[a].articles[i] = article.title
         self.write(t_list, target_list)
 
     def show(self, target_list=None, **kw):
         article_list = self.load_list(target_list)
         if article_list:
             print json.dumps(article_list.file_metadata, indent=4)
-            print '\nTotal articles: ', len(article_list._get_articles()), '\n'
+            print '\nTotal articles: ', len(article_list.get_articles()), '\n'
         elif article_list is None:
             article_lists = self.get_all_list_dicts()
             als = [['Articles', 'Unresolved', 'Actions', 'Updated', 'Name']]
@@ -250,10 +261,10 @@ class ArticleList(object):
 
     @property
     def titles(self):
-        return [a.name for a in self._get_articles()]
+        return [a.name for a in self.get_articles()]
 
     def __len__(self):
-        return len(self._get_articles())
+        return len(self.get_articles())
 
     def append_action(self, action, operation_list, page_infos, source):
         new_action = ListAction(action=action,
@@ -263,20 +274,22 @@ class ArticleList(object):
         self.actions.append(new_action)
         pass
 
-    def _get_articles(self):
-        article_set = set()
+    def get_articles(self):
+        article_set = []
         for action in self.actions:
-            action_articles = set(action.articles)
             if action.action == 'include':
-                article_set = article_set.union(action_articles)
+                for cur_article in action.articles:
+                    if cur_article.title not in [a.title for a in article_set]:
+                        article_set.append(cur_article)
             elif action.action == 'exclude':
-                article_set = article_set - action_articles
+                article_set = [a for a in article_set if a.title not in
+                              [e.title for e in action.articles]]
             else:
                 raise Exception('wut')
         return article_set
 
     def _get_unresolved_articles(self):
-        all_articles = self._get_articles()
+        all_articles = self.get_articles()
         return [a for a in all_articles if isinstance(a, UnresolvedPage)]
 
     def to_string(self):
@@ -287,7 +300,7 @@ class ArticleList(object):
         return ret
 
     def summarize(self):
-        desc = (len(self._get_articles()),
+        desc = (len(self.get_articles()),
                 len(self._get_unresolved_articles()),
                 len(self.actions),
                 self.file_metadata.get('date', 'new'))
@@ -348,11 +361,16 @@ class ListAction(object):
                 ret_dict[attr] = ret_dict[attr].strftime(DATE_FORMAT)
         return ret + json.dumps(ret_dict) + '\n'
 
+    def get_article_string(self):
+        ret = ''
+        for article in self.articles:
+            ret += print_page_info(article)
+        return ret
+
     def to_string(self):
         ret = self.get_meta_string()
         # if not page infos, get page info
-        for article in self.articles:
-            ret += print_page_info(article)
+        ret += self.get_article_string()
         return ret
 
 
@@ -369,7 +387,11 @@ def print_page_info(pi):
     if isinstance(pi, UnresolvedPage):
         ret = pi.title
     else:
-        ret = json.dumps((pi.title, pi.page_id, pi.ns, pi.subject_id, pi.talk_id))
+        try:
+            ret = json.dumps((pi.title, pi.page_id, pi.ns, pi.subject_id, pi.talk_id))
+        except AttributeError:
+            # probably UnresolvedPage
+            ret = pi
     return ret + u'\n'
 
 
@@ -524,7 +546,7 @@ def test_exclude_list_op():
                 target_list=TEST_LIST_NAME,
                 operation_list=['get_category', 'Physics'],
                 limit=30)
-    ret = alm.load_list(TEST_LIST_NAME)._get_articles()
+    ret = alm.load_list(TEST_LIST_NAME).get_articles()
     return len(ret) < 50 and len(ret) >= 20
 
 
