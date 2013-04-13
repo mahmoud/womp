@@ -1,0 +1,8 @@
+TODOs
+ - article_list.py
+    - intersect
+    - xor
+    - clear list/action?
+    - list available wapiti operations
+- fetch.py
+    - automatically create lists
