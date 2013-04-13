@@ -75,10 +75,10 @@ def list_editor_submit(request):
     meta = request.values['meta'].lstrip('##')
     listname = request.values['name']
     articles = [a.strip() for a in request.values['articles'].split('\n')]
-    resolve = request.values['resolve']
+    resolve = request.values.get('resolve')
     alm = ArticleListManager()
     alm.append_action(listname, meta, articles)
-    if bool(resolve):
+    if resolve:
         alm.resolve_the_unresolved(listname)
     return redirect('/list_editor/' + listname)
 

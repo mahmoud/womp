@@ -207,6 +207,16 @@ class ArticleListManager(object):
             else:
                 print 'none'
 
+    def show_operations(self):
+        import wapiti
+        from pprint import pprint
+        ret = []
+        for op in wapiti.operations.ALL_OPERATIONS:
+            ret_type = getattr(op, 'singular_output_type', None)
+            if ret_type and issubclass(ret_type, wapiti.operations.models.PageInfo):
+                ret.append(op)
+        pprint([wapiti.client.camel2under(o.__name__) for o in ret])
+
     def create(self, target_list, **kw):
         existent = self.load_list(target_list)
         if existent:
@@ -439,6 +449,12 @@ def add_subparsers(subparsers):
     parser_show.add_argument('target_list', nargs='?',
                              help='Name of the list or list file')
     parser_show.set_defaults(func_name='show')
+
+    # womp list show_operations
+    parser_show_operations = subparsers.add_parser('show_operations',
+                                                   help='print available \
+                                                   wapiti operations')
+    parser_show_operations.set_defaults(func_name='show_operations')
 
     # womp list create *listname
     parser_create = subparsers.add_parser('create',
