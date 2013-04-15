@@ -431,51 +431,53 @@ def al_parse(contents):
     return ret_actions, comments, file_metadata
 
 
-def add_subparsers(subparsers):
+def add_subparsers(parent_subprs):
     # womp list show
-    parser_show = subparsers.add_parser('show',
-                                        help='print information about \
-                                        available lists')
-    parser_show.add_argument('target_list', nargs='?',
-                             help='Name of the list or list file')
-    parser_show.set_defaults(func_name='show')
+    prs_show = parent_subprs.add_parser('show',
+                                        help=('print information about'
+                                              'available lists'))
+    prs_show.add_argument('target_list', nargs='?',
+                          help='Name of the list or list file')
+    prs_show.set_defaults(method='show')
 
     # womp list create *listname
-    parser_create = subparsers.add_parser('create',
-                                          help='create a new list for \
-                                          article storage')
-    parser_create.add_argument('target_list',
-                               help='name of the list or list file')
-    parser_create.set_defaults(func_name='create')
+    prs_create = parent_subprs.add_parser('create',
+                                          help=('create a new list for'
+                                                ' article storage'))
+    prs_create.add_argument('target_list',
+                            help='name of the list or list file')
+    prs_create.set_defaults(method='create')
 
     # womp list create *listname
-    parser_create = subparsers.add_parser('resolve',
-                                          help='fetch page infos \
-                                          unresolved pages (not implemented)')
-    parser_create.add_argument('target_list',
-                               help='name of the list or list file')
-    parser_create.set_defaults(func_name='resolve_the_unresolved')
+    prs_create = parent_subprs.add_parser('resolve',
+                                          help=('fetch page info for unresolved'
+                                                ' pages (not implemented)'))
+    prs_create.add_argument('target_list',
+                            help='name of the list or list file')
+    prs_create.set_defaults(method='resolve_the_unresolved')
 
     # womp list *arg *listname *wapitisource
-    op_parser = ArgumentParser(description='parses generic search op args.',
-                               add_help=False)
-    op_parser.add_argument('target_list',
-                           help='name or path of article list')
-    op_parser.add_argument('operation_list', nargs='*',
-                           help='article, category, or template')
-    op_parser.add_argument('--limit', '-l', type=int, help='number of articles',
-                           default=DEFAULT_LIMIT)
-    op_parser.set_defaults(func_name='list_op')
+    op_prs = ArgumentParser(description='parses generic search op args.',
+                            add_help=False)
+    op_prs.add_argument('target_list',
+                        help='name or path of article list')
+    op_prs.add_argument('operation_list', nargs='*',
+                        help='article, category, or template')
+    op_prs.add_argument('--limit', '-l', type=int,
+                        help='max number of articles',
+                        default=DEFAULT_LIMIT)
+    op_prs.set_defaults(method='list_op')
 
     # actions
-    parser_include = subparsers.add_parser('include', parents=[op_parser],
-                                           help='add articles to the list from\
-                                           wapiti operations')
-    parser_include.set_defaults(op_name='include')
-    parser_exclude = subparsers.add_parser('exclude', parents=[op_parser],
-                                           help='exclude articles to the list from\
-                                           wapiti operations')
-    parser_exclude.set_defaults(op_name='exclude')
+    _include_help = 'add articles to the list based on a wapiti operation'
+    include_prs = parent_subprs.add_parser('include', parents=[op_prs],
+                                           help=_include_help)
+    include_prs.set_defaults(op_name='include')
+
+    _exclude_help = 'remove articles from the list based on a wapiti operation'
+    exclude_prs = parent_subprs.add_parser('exclude', parents=[op_prs],
+                                           help=_exclude_help)
+    exclude_prs.set_defaults(op_name='exclude')
     '''
     # someday
     parser_intersect = subparsers.add_parser('intersect', parents=[op_parser])
@@ -484,6 +486,14 @@ def add_subparsers(subparsers):
     parser_xor.set_defaults(op_name='xor')
     '''
     return
+
+
+def handle_action(**kwargs):
+    list_home = kwargs.pop('list_home', None)
+    alm = ArticleListManager(list_home)
+
+    method = kwargs.pop('method')
+    getattr(alm, method)(**kwargs)
 
 
 def create_parser():
@@ -576,17 +586,17 @@ def test_load_list():
 
 
 def _main():
-    tests = [f for f in globals() if f.startswith('test_')]
-    results = {}
-    for k in tests:
-        results[k] = globals()[k]()
     from pprint import pprint
+    results = {}
+    tests = [v for k, v in globals().items() if k.startswith('test_')]
+    for test_func in tests:
+        results[test_func.func_name] = test_func()
     pprint(results)
 
 
 if __name__ == '__main__':
     try:
         main()
-    except:
+    except Exception as e:
         import pdb;pdb.post_mortem()
         raise

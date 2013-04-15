@@ -1,20 +1,23 @@
 from __future__ import unicode_literals
 
+from gevent import monkey
+monkey.patch_all()
+
 import os
 import sys
 import time
 import json
 import codecs
-from gevent import monkey
+from argparse import ArgumentParser
+
 from gevent import pool
 from gevent.greenlet import Greenlet
 from gevent.threadpool import ThreadPool
-from argparse import ArgumentParser
+
 from wapiti import WapitiClient
 from article_list import ArticleListManager
 from dashboard_server import start_dashboard_server
 from inputs import DEFAULT_INPUTS
-monkey.patch_all()
 
 DEFAULT_EXT = '.fetch_data'
 DEFAULT_CONC = 20
@@ -238,17 +241,20 @@ def create_parser():
     return root_parser
 
 
+def handle_action(**kwargs):
+    print 'fetch', kwargs
+    return
+
+
 def arg_fetch_list(target_list_name,
                    list_home=None,
                    save=False,
                    no_pdb=False,
                    no_dashboard=False):
-    dashboard = True
-    if no_dashboard:
-        dashboard = False
+    use_dashboard = not no_dashboard
     fm = FetchManager(list_home)
     fm.load_list(target_list_name)
-    fm.run(dashboard=dashboard)
+    fm.run(dashboard=use_dashboard)
     if save:
         fm.write()
     if not no_pdb:  # double negative for easier cli
@@ -257,13 +263,14 @@ def arg_fetch_list(target_list_name,
 
 def main():
     parser = create_parser()
-    if len(sys.argv) == 1:
+    try:
+        args = parser.parse_args()
+    except SystemExit:
         parser.print_help()
-        print ''
-    args = parser.parse_args()
+        print
     kwargs = dict(args._get_kwargs())
-    func_name = kwargs.pop('func')
-    func_name(**kwargs)
+    func = kwargs.pop('func')
+    func(**kwargs)
 
 
 def _main():

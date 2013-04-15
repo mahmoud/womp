@@ -2,13 +2,13 @@ from __future__ import unicode_literals
 import os
 from os.path import join as pjoin
 import shutil
+
 import ConfigParser
 from argparse import ArgumentParser
 
-from wapiti import WapitiClient
-
+import fetch
 import article_list
-#import fetch
+
 
 _DEFAULT_DIR_PERMS = 0755
 _CURDIR = os.path.abspath(os.path.dirname(__file__))
@@ -33,6 +33,8 @@ class WompEnv(object):
 
     @classmethod
     def init_new(cls, path):
+        if not isinstance(path, basestring):
+            path = path[0]  # friggin nargs=1
         path = os.path.normpath(path)
         if os.path.exists(path):
             # TODO: force?
@@ -48,16 +50,13 @@ class WompEnv(object):
 
         return cls.from_path(path)
 
-    @property
-    def list_home(self):
-        return pjoin(self.path, 'article_lists')
-
     def get_wapiti_client(self):
         if self._wapiti_client:
             return self._wapiti_client
         email = self.config.get('user', 'email')
         self._wapiti_client = WapitiClient(email)
         return self._wapiti_client
+
 
 
 def _init_default_config(path):
@@ -71,23 +70,27 @@ def init_home(path, **kw):
 
 
 def create_parser():
-    prs = ArgumentParser(description='womp: Wikipedia Open Metrics Platform')
-    prs.add_argument('--home', help='path to womp home directory')
+    prs = ArgumentParser(description='WOMP: Wikipedia Open Metrics Platform')
+    prs.add_argument('--home', help='path to WOMP home directory')
     subprs = prs.add_subparsers()
 
-    prs_init = subprs.add_parser('init')
-    prs_init.set_defaults(subparser_name='init')
+    prs_init = subprs.add_parser('init',
+                                 description='create a new WOMP environment')
     prs_init.add_argument('path', nargs=1,
-                          help='path of new womp home directory')
-    prs_init.set_defaults(func_name='init_new')
+                          help='path of new WOMP home directory')
+    prs_init.set_defaults(handler=init_home)
 
-    prs_list = subprs.add_parser('list')
-    prs_list.set_defaults(subparser_name='list')
+    prs_list = subprs.add_parser('list',
+                                 description='create and manipulate collections of articles')
+    prs_list.set_defaults(subprs_name='list')
+    prs_list.set_defaults(handler=article_list.handle_action)
     article_list.add_subparsers(prs_list.add_subparsers())
 
-    #prs_fetch = subprs.add_parser('fetch')
-    #prs_fetch.set_defaults(subparser_name='fetch')
-    #fetch.add_subparsers(prs_fetch.add_subparsers())
+    prs_fetch = subprs.add_parser('fetch',
+                                  description='gather data for articles in a given list')
+    prs_fetch.set_defaults(subprs_name='fetch')
+    prs_fetch.set_defaults(handler=fetch.handle_action)
+    fetch.add_subparsers(prs_fetch.add_subparsers())
 
     return prs
 
@@ -107,18 +110,13 @@ def get_decoded_kwargs(args):
 def main():
     parser = create_parser()
     args = parser.parse_args()
-    kwargs = get_decoded_kwargs(args)
-    subparser_name = kwargs.pop('subparser_name')
-    func_name = kwargs.pop('func_name')
-    if func_name == 'init_new':
-        path = kwargs['path'][0]  # friggin nargs=1
-        WompEnv.init_new(path)
-    else:
+    kwargs = dict(args._get_kwargs())
+    womp_env = None
+    if args.handler is not init_home:
         womp_env = WompEnv.from_path(kwargs['home'])
-        if subparser_name == 'list':
-            getattr(womp_env.list_manager, func_name)(**kwargs)
-        else:
-            raise ValueError('unrecognized subparser: %r' % subparser_name)
+    kwargs['env'] = womp_env
+    args.handler(**kwargs)
+
 
 if __name__ == '__main__':
     try:
