@@ -1,1 +1,1 @@
-from environment import WompEnv
+from core import WompEnv
