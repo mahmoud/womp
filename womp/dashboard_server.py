@@ -1,36 +1,34 @@
 from __future__ import unicode_literals
 
 import os
+from os.path import join as pjoin
 import time
 from collections import defaultdict
+
 from wapiti import WapitiClient
 from clastic import Application, json_response
 from clastic.render.mako_templates import MakoRenderFactory
-from article_list import ArticleListManager
 from inputs import ALL_INPUTS
 
-input_mods = ALL_INPUTS
+_CURDIR = os.path.abspath(os.path.dirname(__file__))
+_TEMPLATE_PATH = pjoin(_CURDIR, 'templates')
+_STATIC_PATH = pjoin(_CURDIR, 'templates', 'assets')
 
-AVAIL_INPUTS = {}
 
-for im in ALL_INPUTS:
-    if hasattr(im, 'fetch'):
-        AVAIL_INPUTS[im.__name__] = im
-        AVAIL_INPUTS[im.__name__.lower()] = im
-AVAIL_INPUTS.pop('Input', None)
+AVAIL_INPUTS = dict([(i.__name__.lower(), i) for i in ALL_INPUTS
+                     if i.__name__ != 'Input'])
 
 
 def input_list():
-    return {'inputs': AVAIL_INPUTS}
+    return {'inputs': [i.__name__ for i in AVAIL_INPUTS.values()]}
 
 
-def article_list():
-    alm = ArticleListManager()
-    return {'article_lists': alm.get_list_dicts()}
+def article_list(list_manager):
+    return {'article_lists': list_manager.get_list_dicts()}
 
 
 def input_server(input_name, title):
-    wc = WapitiClient('testing')
+    wc = WapitiClient('test@example.com')
     if not title:
         title = 'Coffee'
     page_info = wc.get_page_info(title)[0]
@@ -74,25 +72,36 @@ def fetch_task_dashboard(fetch_manager):
            }
     return ret
 
-mako_render = MakoRenderFactory(os.path.join(os.getcwd(), 'templates'))
-routes = [('/input_list', input_list, 'list.html'),
-          ('/<input_name>/<title>', input_server, json_response),
-          ('/article_list', article_list, 'article_list.html')]
+
+def create_input_server():
+    routes = [('/', input_list, 'list.html'),
+              ('/<input_name>/<title>', input_server, json_response)]
+    mako_render = MakoRenderFactory(_TEMPLATE_PATH)
+    return Application(routes, render_factory=mako_render)
 
 
-def start_dashboard_server(fetch_manager):
-    static_path = os.path.join(os.getcwd(), 'templates', 'assets')
+def create_dashboard(womp_env):
+    resources = {'womp_env': womp_env,
+                 'fetch_manager': womp_env.fetch_manager,
+                 'list_manager': womp_env.list_manager}
+    input_server = create_input_server()
+    routes = [('/', fetch_task_dashboard, 'dashboard.html'),
+              ('/dashboard', fetch_task_dashboard, 'dashboard.html'),
+              ('/dashboard/json', fetch_task_dashboard, json_response),
+              ('/article_list', article_list, 'article_list.html'),
+              ('/inputs', input_server)]
+    mako_render = MakoRenderFactory(_TEMPLATE_PATH)
+
     if not fetch_manager.dashboard_port:
         fetch_manager.dashboard_port = 5000
-    resources = {'fetch_manager': fetch_manager}
-    routes.append(('/dashboard', fetch_task_dashboard, 'dashboard.html'))
-    routes.append(('/dashboard/json', fetch_task_dashboard, json_response))
-    app = Application(routes, resources, mako_render)
-    app.serve(use_reloader=False,
-              static_prefix='static',
-              port=fetch_manager.dashboard_port,
-              static_path=static_path)
+
+    return Application(routes, resources, mako_render)
+    #app.serve(use_reloader=False,
+    #          static_prefix='static',
+    #          port=fetch_manager.dashboard_port,
+    #          static_path=static_path)
+
+
 
 if __name__ == '__main__':
-    app = Application(routes, render_factory=mako_render)
-    app.serve()
+    create_input_server().serve()

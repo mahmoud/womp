@@ -29,6 +29,7 @@ Config values:
   * inputs
 """
 
+
 class WompEnv(object):
     def __init__(self, config, path):
         self.config = config
