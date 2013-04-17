@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 
 import os
+from os.path import join as pjoin
 import sys
 import json
 import codecs
@@ -80,13 +81,13 @@ class ArticleListManager(object):
             return None  # TODO: raise exc here? who uses this?
         search_dir = self._home_path
         target_path = None
-        filename = filename + DEFAULT_EXT
         if os.path.isdir(search_dir):
-            if os.path.isfile(filename):
-                target_path = os.path.join(search_dir, filename)
-            elif os.path.isfile(filename + DEFAULT_EXT):
-                target_path = os.path.join(search_dir, filename + DEFAULT_EXT)
-        if os.path.isfile(filename):
+            full_path = pjoin(search_dir, filename)
+            if os.path.isfile(full_path):
+                target_path = full_path
+            elif os.path.isfile(full_path + DEFAULT_EXT):
+                target_path = full_path + DEFAULT_EXT
+        elif os.path.isfile(filename):
             target_path = filename
         if target_path:
             return target_path
@@ -116,12 +117,12 @@ class ArticleListManager(object):
 
     @property
     def wapiti_client(self):
-        if self._wapiti_client:
-            return self._wapiti_client
         if self.env:
-            self.env.get_wapiti_client()
+            return self.env.get_wapiti_client()
         else:
             # testing only, I think
+            if self._wapiti_client:
+                return self._wapiti_client
             from wapiti import WapitiClient
             self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
             return self._wapiti_client
@@ -486,14 +487,6 @@ def add_subparsers(parent_subprs):
     parser_xor.set_defaults(op_name='xor')
     '''
     return
-
-
-def handle_action(**kwargs):
-    list_home = kwargs.pop('list_home', None)
-    alm = ArticleListManager(list_home)
-
-    method = kwargs.pop('method')
-    getattr(alm, method)(**kwargs)
 
 
 def create_parser():

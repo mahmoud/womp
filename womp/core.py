@@ -8,19 +8,54 @@ from argparse import ArgumentParser
 
 import fetch
 import article_list
-
+from wapiti import WapitiClient
 
 _DEFAULT_DIR_PERMS = 0755
 _CURDIR = os.path.abspath(os.path.dirname(__file__))
 _CONF_NAME = 'womp.conf'
 
 
+"""
+Config values:
+* General
+  * user email
+  * dashboard settings
+  * debug (debug level)
+* List
+  * TBD
+* Fetch
+  * concurrency level
+  * fetch limits
+  * inputs
+"""
+
 class WompEnv(object):
     def __init__(self, config, path):
         self.config = config
         self.path = path
 
+        self.list_home = pjoin(path, 'article_lists')
         self.list_manager = article_list.ArticleListManager(self)
+
+        self.fetch_home = pjoin(path, 'fetch')
+        self.fetch_manager = fetch.FetchManager(self)
+        # TODO: dashboard
+
+    def handle_action(self, action_group, **kwargs):
+        if action_group == 'list':
+            manager = self.list_manager
+        elif action_group == 'fetch':
+            manager = self.fetch_manager
+        else:
+            raise ValueError('unrecognized action group %r' % (action_group,))
+        try:
+            method_name = kwargs['method']
+            method = getattr(manager, method_name)
+        except KeyError:
+            raise ValueError("expected 'method' argument")
+        except AttributeError:
+            raise ValueError('unknown method %r' % (method_name,))
+        return method(**kwargs)
 
     @classmethod
     def from_path(cls, path=None, config_name=_CONF_NAME):
@@ -51,12 +86,11 @@ class WompEnv(object):
         return cls.from_path(path)
 
     def get_wapiti_client(self):
-        if self._wapiti_client:
+        if getattr(self, '_wapiti_client', None):
             return self._wapiti_client
         email = self.config.get('user', 'email')
         self._wapiti_client = WapitiClient(email)
         return self._wapiti_client
-
 
 
 def _init_default_config(path):
@@ -65,31 +99,25 @@ def _init_default_config(path):
     os.chmod(init_conf, 0600)
 
 
-def init_home(path, **kw):
-    WompEnv.init_new(path)
-
-
 def create_parser():
     prs = ArgumentParser(description='WOMP: Wikipedia Open Metrics Platform')
     prs.add_argument('--home', help='path to WOMP home directory')
-    subprs = prs.add_subparsers()
+    subs = prs.add_subparsers()
 
-    prs_init = subprs.add_parser('init',
-                                 description='create a new WOMP environment')
+    prs_init = subs.add_parser('init',
+                               description='create a new WOMP environment')
+    prs_init.set_defaults(action_group='init')
     prs_init.add_argument('path', nargs=1,
                           help='path of new WOMP home directory')
-    prs_init.set_defaults(handler=init_home)
 
-    prs_list = subprs.add_parser('list',
-                                 description='create and manipulate collections of articles')
-    prs_list.set_defaults(subprs_name='list')
-    prs_list.set_defaults(handler=article_list.handle_action)
+    prs_list = subs.add_parser('list',
+                               description='create and manipulate collections of articles')
+    prs_list.set_defaults(action_group='list')
     article_list.add_subparsers(prs_list.add_subparsers())
 
-    prs_fetch = subprs.add_parser('fetch',
-                                  description='gather data for articles in a given list')
-    prs_fetch.set_defaults(subprs_name='fetch')
-    prs_fetch.set_defaults(handler=fetch.handle_action)
+    prs_fetch = subs.add_parser('fetch',
+                                description='gather data for articles in a given list')
+    prs_fetch.set_defaults(action_group='fetch')
     fetch.add_subparsers(prs_fetch.add_subparsers())
 
     return prs
@@ -110,12 +138,13 @@ def get_decoded_kwargs(args):
 def main():
     parser = create_parser()
     args = parser.parse_args()
-    kwargs = dict(args._get_kwargs())
+    kwargs = get_decoded_kwargs(args)
     womp_env = None
-    if args.handler is not init_home:
+    if args.action_group == 'init':
+        return WompEnv.init_new(kwargs['path'])
+    else:
         womp_env = WompEnv.from_path(kwargs['home'])
-    kwargs['env'] = womp_env
-    args.handler(**kwargs)
+        return womp_env.handle_action(**kwargs)
 
 
 if __name__ == '__main__':
