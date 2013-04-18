@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 
 import fetch
 import article_list
+import dashboard
 from wapiti import WapitiClient
 
 _DEFAULT_DIR_PERMS = 0755
@@ -40,7 +41,8 @@ class WompEnv(object):
 
         self.fetch_home = pjoin(path, 'fetch')
         self.fetch_manager = fetch.FetchManager(self)
-        # TODO: dashboard
+
+        self.dashboard = dashboard.create_dashboard(self)
 
     def handle_action(self, action_group, **kwargs):
         if action_group == 'list':
@@ -92,6 +94,12 @@ class WompEnv(object):
         email = self.config.get('user', 'email')
         self._wapiti_client = WapitiClient(email)
         return self._wapiti_client
+
+    def start_dashboard(self):
+        self.dashboard.serve(use_reloader=False,
+                             static_prefix='static',
+                             port=5000,  # TODO
+                             static_path=dashboard.STATIC_PATH)  # TODO
 
 
 def _init_default_config(path):

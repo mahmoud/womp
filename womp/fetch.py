@@ -241,11 +241,6 @@ def create_parser():
     return root_parser
 
 
-def handle_action(**kwargs):
-    print 'fetch', kwargs
-    return
-
-
 def arg_fetch_list(target_list_name,
                    list_home=None,
                    save=False,
