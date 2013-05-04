@@ -1,20 +1,22 @@
 from __future__ import unicode_literals
 
+from gevent import monkey
+monkey.patch_all()
+
 import os
-import sys
 import time
 import json
 import codecs
-from gevent import monkey
+from argparse import ArgumentParser
+
 from gevent import pool
 from gevent.greenlet import Greenlet
 from gevent.threadpool import ThreadPool
-from argparse import ArgumentParser
+
 from wapiti import WapitiClient
 from article_list import ArticleListManager
-from dashboard_server import start_dashboard_server
+from dashboard import create_fetch_dashboard
 from inputs import DEFAULT_INPUTS
-monkey.patch_all()
 
 DEFAULT_EXT = '.fetch_data'
 DEFAULT_CONC = 20
@@ -72,19 +74,16 @@ class FetchManager(object):
         article_list = self.alm.load_list(name)
         self.articles = article_list.get_articles()
 
-    def run(self, **kwargs):
-        self.dashboard = kwargs.pop('dashboard', True)
-        self.dashboard_port = kwargs.pop('port', None)
+    def run_fetch(self):
         self.start_time = time.time()
         print 'Booting up wapiti...'
         self.wapiti_client = WapitiClient('makuro@makuro.org')  # todo: config
         if self.dashboard:
-            print 'Spawning dashboard...'
-            tpool = ThreadPool(2)
-            tpool.spawn(start_dashboard_server, self)
+            self.spawn_dashboard()
         print 'Creating Loupes for', len(self.articles), 'articles...'
         for i, ai in enumerate(self.articles):
-            ft = FetchTask(ai, self.wapiti_client,
+            ft = FetchTask(ai,
+                           self.wapiti_client,
                            input_pool=self.input_pool,
                            input_classes=self.inputs,
                            order=i,
@@ -92,7 +91,12 @@ class FetchManager(object):
             ft.link(self._on_fetch_task_complete)
             self.pool.start(ft)
         self.pool.join()
-        pass
+
+    def spawn_dashboard(self):
+        print 'Spawning dashboard...'
+        dashboard = create_fetch_dashboard(self)
+        tpool = ThreadPool(2)
+        tpool.spawn(dashboard.serve)
 
     def write(self):
         if not self.results:
@@ -243,12 +247,10 @@ def arg_fetch_list(target_list_name,
                    save=False,
                    no_pdb=False,
                    no_dashboard=False):
-    dashboard = True
-    if no_dashboard:
-        dashboard = False
+    use_dashboard = not no_dashboard
     fm = FetchManager(list_home)
     fm.load_list(target_list_name)
-    fm.run(dashboard=dashboard)
+    fm.run(use_dashboard=use_dashboard)
     if save:
         fm.write()
     if not no_pdb:  # double negative for easier cli
@@ -257,13 +259,14 @@ def arg_fetch_list(target_list_name,
 
 def main():
     parser = create_parser()
-    if len(sys.argv) == 1:
+    try:
+        args = parser.parse_args()
+    except SystemExit:
         parser.print_help()
-        print ''
-    args = parser.parse_args()
+        print
     kwargs = dict(args._get_kwargs())
-    func_name = kwargs.pop('func')
-    func_name(**kwargs)
+    func = kwargs.pop('func')
+    func(**kwargs)
 
 
 def _main():

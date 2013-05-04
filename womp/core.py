@@ -2,17 +2,33 @@ from __future__ import unicode_literals
 import os
 from os.path import join as pjoin
 import shutil
+
 import ConfigParser
 from argparse import ArgumentParser
 
-from wapiti import WapitiClient
-
+import fetch
 import article_list
-#import fetch
+import dashboard
+from wapiti import WapitiClient
 
 _DEFAULT_DIR_PERMS = 0755
 _CURDIR = os.path.abspath(os.path.dirname(__file__))
 _CONF_NAME = 'womp.conf'
+
+
+"""
+Config values:
+* General
+  * user email
+  * dashboard settings
+  * debug (debug level)
+* List
+  * TBD
+* Fetch
+  * concurrency level
+  * fetch limits
+  * inputs
+"""
 
 
 class WompEnv(object):
@@ -20,7 +36,29 @@ class WompEnv(object):
         self.config = config
         self.path = path
 
+        self.list_home = pjoin(path, 'article_lists')
         self.list_manager = article_list.ArticleListManager(self)
+
+        self.fetch_home = pjoin(path, 'fetch')
+        self.fetch_manager = fetch.FetchManager(self)
+
+        self.dashboard = dashboard.create_dashboard(self)
+
+    def handle_action(self, action_group, **kwargs):
+        if action_group == 'list':
+            manager = self.list_manager
+        elif action_group == 'fetch':
+            manager = self.fetch_manager
+        else:
+            raise ValueError('unrecognized action group %r' % (action_group,))
+        try:
+            method_name = kwargs['method']
+            method = getattr(manager, method_name)
+        except KeyError:
+            raise ValueError("expected 'method' argument")
+        except AttributeError:
+            raise ValueError('unknown method %r' % (method_name,))
+        return method(**kwargs)
 
     @classmethod
     def from_path(cls, path=None, config_name=_CONF_NAME):
@@ -33,6 +71,8 @@ class WompEnv(object):
 
     @classmethod
     def init_new(cls, path):
+        if not isinstance(path, basestring):
+            path = path[0]  # friggin nargs=1
         path = os.path.normpath(path)
         if os.path.exists(path):
             # TODO: force?
@@ -48,16 +88,18 @@ class WompEnv(object):
 
         return cls.from_path(path)
 
-    @property
-    def list_home(self):
-        return pjoin(self.path, 'article_lists')
-
     def get_wapiti_client(self):
-        if self._wapiti_client:
+        if getattr(self, '_wapiti_client', None):
             return self._wapiti_client
         email = self.config.get('user', 'email')
         self._wapiti_client = WapitiClient(email)
         return self._wapiti_client
+
+    def start_dashboard(self):
+        self.dashboard.serve(use_reloader=False,
+                             static_prefix='static',
+                             port=5000,  # TODO
+                             static_path=dashboard.STATIC_PATH)  # TODO
 
 
 def _init_default_config(path):
@@ -66,28 +108,26 @@ def _init_default_config(path):
     os.chmod(init_conf, 0600)
 
 
-def init_home(path, **kw):
-    WompEnv.init_new(path)
-
-
 def create_parser():
-    prs = ArgumentParser(description='womp: Wikipedia Open Metrics Platform')
-    prs.add_argument('--home', help='path to womp home directory')
-    subprs = prs.add_subparsers()
+    prs = ArgumentParser(description='WOMP: Wikipedia Open Metrics Platform')
+    prs.add_argument('--home', help='path to WOMP home directory')
+    subs = prs.add_subparsers()
 
-    prs_init = subprs.add_parser('init')
-    prs_init.set_defaults(subparser_name='init')
+    prs_init = subs.add_parser('init',
+                               description='create a new WOMP environment')
+    prs_init.set_defaults(action_group='init')
     prs_init.add_argument('path', nargs=1,
-                          help='path of new womp home directory')
-    prs_init.set_defaults(func_name='init_new')
+                          help='path of new WOMP home directory')
 
-    prs_list = subprs.add_parser('list')
-    prs_list.set_defaults(subparser_name='list')
+    prs_list = subs.add_parser('list',
+                               description='create and manipulate collections of articles')
+    prs_list.set_defaults(action_group='list')
     article_list.add_subparsers(prs_list.add_subparsers())
 
-    #prs_fetch = subprs.add_parser('fetch')
-    #prs_fetch.set_defaults(subparser_name='fetch')
-    #fetch.add_subparsers(prs_fetch.add_subparsers())
+    prs_fetch = subs.add_parser('fetch',
+                                description='gather data for articles in a given list')
+    prs_fetch.set_defaults(action_group='fetch')
+    fetch.add_subparsers(prs_fetch.add_subparsers())
 
     return prs
 
@@ -108,17 +148,13 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     kwargs = get_decoded_kwargs(args)
-    subparser_name = kwargs.pop('subparser_name')
-    func_name = kwargs.pop('func_name')
-    if func_name == 'init_new':
-        path = kwargs['path'][0]  # friggin nargs=1
-        WompEnv.init_new(path)
+    womp_env = None
+    if args.action_group == 'init':
+        return WompEnv.init_new(kwargs['path'])
     else:
         womp_env = WompEnv.from_path(kwargs['home'])
-        if subparser_name == 'list':
-            getattr(womp_env.list_manager, func_name)(**kwargs)
-        else:
-            raise ValueError('unrecognized subparser: %r' % subparser_name)
+        return womp_env.handle_action(**kwargs)
+
 
 if __name__ == '__main__':
     try:
