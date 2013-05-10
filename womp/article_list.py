@@ -449,12 +449,12 @@ def add_subparsers(parent_subprs):
                                               'available lists'))
     prs_show.add_argument('target_list', nargs='?',
                           help='Name of the list or list file')
-    prs_show.set_defaults(method='show')
+    prs_show.set_defaults(func_name='show')
 
     # womp list show_operations
-    parser_show_operations = subparsers.add_parser('show_operations',
-                                                   help='print available \
-                                                   wapiti operations')
+    parser_show_operations = parent_subprs.add_parser('show_operations',
+                                                      help='print available \
+                                                      wapiti operations')
     parser_show_operations.set_defaults(func_name='show_operations')
 
     # womp list create *listname
@@ -463,7 +463,7 @@ def add_subparsers(parent_subprs):
                                                 ' article storage'))
     prs_create.add_argument('target_list',
                             help='name of the list or list file')
-    prs_create.set_defaults(method='create')
+    prs_create.set_defaults(func_name='create')
 
     # womp list create *listname
     prs_create = parent_subprs.add_parser('resolve',
@@ -471,7 +471,7 @@ def add_subparsers(parent_subprs):
                                                 ' pages (not implemented)'))
     prs_create.add_argument('target_list',
                             help='name of the list or list file')
-    prs_create.set_defaults(method='resolve_the_unresolved')
+    prs_create.set_defaults(func_name='resolve_the_unresolved')
 
     # womp list *arg *listname *wapitisource
     op_prs = ArgumentParser(description='parses generic search op args.',
@@ -483,7 +483,7 @@ def add_subparsers(parent_subprs):
     op_prs.add_argument('--limit', '-l', type=int,
                         help='max number of articles',
                         default=DEFAULT_LIMIT)
-    op_prs.set_defaults(method='list_op')
+    op_prs.set_defaults(func_name='list_op')
 
     # actions
     _include_help = 'add articles to the list based on a wapiti operation'
@@ -534,7 +534,7 @@ def main():
     list_home = kwargs.pop('list_home', None)
     alm = ArticleListManager(list_home)
 
-    func_name = kwargs.pop('func_name')
+    func_name = kwargs.pop('func_name', None)
     getattr(alm, func_name)(**kwargs)
 
 

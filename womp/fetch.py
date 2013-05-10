@@ -74,8 +74,9 @@ class FetchManager(object):
         article_list = self.alm.load_list(name)
         self.articles = article_list.get_articles()
 
-    def run_fetch(self):
+    def run_fetch(self, use_dashboard=False):
         self.start_time = time.time()
+        self.dashboard = use_dashboard
         print 'Booting up wapiti...'
         self.wapiti_client = WapitiClient('makuro@makuro.org')  # todo: config
         if self.dashboard:
@@ -250,7 +251,7 @@ def arg_fetch_list(target_list_name,
     use_dashboard = not no_dashboard
     fm = FetchManager(list_home)
     fm.load_list(target_list_name)
-    fm.run(use_dashboard=use_dashboard)
+    fm.run_fetch(use_dashboard=use_dashboard)
     if save:
         fm.write()
     if not no_pdb:  # double negative for easier cli
@@ -264,16 +265,17 @@ def main():
     except SystemExit:
         parser.print_help()
         print
-    kwargs = dict(args._get_kwargs())
-    func = kwargs.pop('func')
-    func(**kwargs)
+    else:
+        kwargs = dict(args._get_kwargs())
+        func = kwargs.pop('func')
+        func(**kwargs)
 
 
 def _main():
     fm = FetchManager()
     fm.load_list('test_coffee')
     test_page = [f for f in fm.articles][0]
-    fm.run()
+    fm.run_fetch()
     import pdb; pdb.set_trace()
 
 
