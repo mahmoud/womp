@@ -7,6 +7,7 @@ from watchers import Watchers
 from revisions import Revisions
 from langlinks import LangLinks
 from interwikilinks import InterWikiLinks
+from templates import ParsedTemplates
 
 '''
 from feedback import FeedbackV4
@@ -23,6 +24,16 @@ from wikitrust import Wikitrust
 `from article_history import ArticleHistory
 `from protection import Protection
 '''
-ALL_INPUTS = [Backlinks, DOM, PageViews, Protection, Revisions, ArticleHistory, Watchers, LangLinks, InterWikiLinks]
+
+ALL_INPUTS = [ArticleHistory,
+              Backlinks,
+              DOM,
+              PageViews,
+              ParsedTemplates,
+              Protection,
+              Revisions,
+              Watchers,
+              LangLinks,
+              InterWikiLinks]
 
 DEFAULT_INPUTS = ALL_INPUTS
