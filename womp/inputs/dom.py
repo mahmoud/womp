@@ -1,7 +1,19 @@
+import string
+import re
 from base import Input
 from pyquery import PyQuery
+from collections import Counter
 
 from stats import dist_stats
+
+# from boltons
+_punct_ws_str = string.punctuation + string.whitespace
+_punct_ws_str = _punct_ws_str.replace('-', '')
+_punct_re = re.compile('[' + _punct_ws_str + ']+')
+
+
+def split_punct_ws(text):
+    return [w for w in _punct_re.split(text) if w]
 
 
 def get_text(element):
@@ -14,6 +26,15 @@ def get_text(element):
 
 def word_count(element):
     return len(get_text(element).split())
+
+
+def term_frequency(f, terms):
+    ret = {}
+    all_text = [w.lower() for w in split_punct_ws(f('p').text())]
+    word_counter = Counter(all_text)
+    for term in terms:
+        ret[term] = word_counter.get(term, 0)
+    return ret
 
 
 def paragraph_counts(pq):
@@ -75,6 +96,7 @@ def get_root(pq):
         roottree = pq[0].getroottree()  # for lxml 3
     return roottree
 
+
 def pq_contains(elem, search):
     """Just a quick factory function to create lambdas to do xpath in a cross-version way"""
     def xpath_search(f):
@@ -109,6 +131,25 @@ class DOM(Input):
 
     # TODO: check pyquery errors
     stats = {
+
+        # Term searching
+        'word_frequency': lambda f: term_frequency(f, ['probably',
+                                                       'possibly',
+                                                       'on the other hand',
+                                                       'one view',
+                                                       'bias',
+                                                       'according to',
+                                                       'historian'
+                                                       'historians',
+                                                       'academic',
+                                                       'biographer',
+                                                       'historiography',
+                                                       'earliest works',
+                                                       'earliest history',
+                                                       'popular historian',
+                                                       'popular historian',
+                                                       'historiographical']),
+
         # General page/page structure stats
         'word_count': lambda f: len(f('p').text().split()),
         'p': lambda f: dist_stats(paragraph_counts(f)),
@@ -137,18 +178,18 @@ class DOM(Input):
         'lead_p_count': lambda f: len(f('#toc').prevAll('p')),
 
         # Hatnotes
-        'hn_rellink_count': lambda f: len(f('div.rellink')), # "See also" link for a section
-        'hn_dablink_count': lambda f: len(f('div.dablink')), # Disambiguation page links
-        'hn_mainlink_count': lambda f: len(f('div.mainarticle')), # Link to main, expanded article
-        'hn_seealso_count': lambda f: len(f('div.seealso')), # Generic see also
-        'hn_relarticle_count': lambda f: len(f('div.relarticle')), # somehow distinct from rellink
+        'hn_rellink_count': lambda f: len(f('div.rellink')),  # "See also" link for a section
+        'hn_dablink_count': lambda f: len(f('div.dablink')),  # Disambiguation page links
+        'hn_mainlink_count': lambda f: len(f('div.mainarticle')),  # Link to main, expanded article
+        'hn_seealso_count': lambda f: len(f('div.seealso')),  # Generic see also
+        'hn_relarticle_count': lambda f: len(f('div.relarticle')),  # somehow distinct from rellink
 
         # Inline/link-based stats
         'ref_count': lambda f: len(f('sup.reference')),
         'cite_count': lambda f: len(f('li[id^="cite_note"]')),
-        'red_link_count': lambda f: len(f('.new')), # New internal links, aka "red links"
+        'red_link_count': lambda f: len(f('.new')),  # New internal links, aka "red links"
         'ext_link_count': lambda f: len(f('.external')),
-        'int_link_text': lambda f: dist_stats([ len(get_text(text)) for text in f('p a[href^="/wiki/"]')]),
+        'int_link_text': lambda f: dist_stats([len(get_text(text)) for text in f('p a[href^="/wiki/"]')]),
         'dead_link_count': lambda f: len(f('a[title^="Wikipedia:Link rot"]')),
         'ref_needed_span_count': pq_contains('span', 'citation'),
         'pov_span_count': pq_contains('span', 'neutrality'),
@@ -164,8 +205,8 @@ class DOM(Input):
         'thumb_img_count': lambda f: len(f('div.thumb')),
         'thumb_left_count': lambda f: len(f('div.tleft')),
         'thumb_right_count': lambda f: len(f('div.tright')),
-        'image_map_count': lambda f: len(f('map')), # The clickable image construct (EasyTimeline)
-        'tex_count': lambda f: len(f('.tex')), # LaTeX/TeX used by mathy things
+        'image_map_count': lambda f: len(f('map')),  # The clickable image construct (EasyTimeline)
+        'tex_count': lambda f: len(f('.tex')),  # LaTeX/TeX used by mathy things
         'infobox_count': lambda f: len(f('.infobox')),
         'navbox_word': element_words_dist('.navbox'),
         'caption_word': element_words_dist('.thumbcaption'),
@@ -224,7 +265,7 @@ class DOM(Input):
         'tmpl_multiple_issues': lambda f: len(f('.ambox-multiple_issues li')),
 
         # Citation type statistics
-        'cite_cl': lambda f: len(f('.citation')), # not to be confused with cite_count
+        'cite_cl': lambda f: len(f('.citation')),  # not to be confused with cite_count
         'cite_journal': lambda f: len(f('.citation.Journal')),
         'cite_web': lambda f: len(f('.citation.web')),
         'cite_news': lambda f: len(f('.citation.news')),
