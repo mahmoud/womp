@@ -535,8 +535,8 @@ def main():
     list_home = kwargs.pop('list_home', None)
     alm = ArticleListManager(list_home)
 
-    func_name = kwargs.pop('func_name', None)
-    getattr(alm, func_name)(**kwargs)
+    method_name = kwargs.pop('method', None)
+    getattr(alm, method_name)(**kwargs)
 
 
 def create_test():
