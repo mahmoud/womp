@@ -36,9 +36,11 @@ def input_server(input_name, title=None, wapiti_client=None):
         input_type = AVAIL_INPUTS[input_name.lower()]
     except KeyError:
         raise ValueError('No input found with name %r' % (input_name,))
-    get_input = input_type(page_info, wc)
-    result = get_input()
-    result['durations'] = get_input.durations
+    input_task = input_type(page_info, wc)
+    result = input_task()
+    if not input_task.successful():
+        raise RuntimeError('input error detected')
+    result['durations'] = input_task.durations
     return result
 
 
