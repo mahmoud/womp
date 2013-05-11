@@ -1,0 +1,6 @@
+include README.md LICENSE
+recursive-include womp *
+
+recursive-exclude * *.py[co]
+recursive-exclude * *.coverage
+recursive-exclude * __pycache__
