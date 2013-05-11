@@ -2,11 +2,11 @@ from __future__ import unicode_literals
 
 import os
 from os.path import join as pjoin
-import sys
+
 import json
 import codecs
 from datetime import datetime
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from argparse import ArgumentParser
 
 DEFAULT_LIMIT = 100
@@ -287,18 +287,18 @@ class ArticleList(object):
         pass
 
     def get_articles(self):
-        article_set = []
+        full_set = OrderedDict()
         for action in self.actions:
             if action.action == 'include':
-                for cur_article in action.articles:
-                    if cur_article.title not in [a.title for a in article_set]:
-                        article_set.append(cur_article)
+                for a in action.articles:
+                    if not a.title in full_set:  # maintaining order
+                        full_set[a.title] = a
             elif action.action == 'exclude':
-                article_set = [a for a in article_set if a.title not in
-                              [e.title for e in action.articles]]
+                for a in action.articles:
+                    full_set.pop(a.title, None)
             else:
                 raise Exception('wut')
-        return article_set
+        return full_set.values()
 
     def _get_unresolved_articles(self):
         all_articles = self.get_articles()
@@ -447,7 +447,7 @@ def add_subparsers(parent_subprs):
     # womp list show
     prs_show = parent_subprs.add_parser('show',
                                         help=('print information about'
-                                              'available lists'))
+                                              ' available lists'))
     prs_show.add_argument('target_list', nargs='?',
                           help='Name of the list or list file')
     prs_show.set_defaults(method='show')
