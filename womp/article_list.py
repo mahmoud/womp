@@ -98,7 +98,8 @@ class ArticleListManager(object):
     def _get_full_list(self):
         ret = []
         try:
-            ret.extend([fn.rsplit(DEFAULT_EXT, 1)[0] for fn in os.listdir(self._home_path)
+            ret.extend([fn.rsplit(DEFAULT_EXT, 1)[0]
+                        for fn in os.listdir(self._home_path)
                         if fn.endswith(DEFAULT_EXT)])
         except IOError:
             pass
@@ -449,13 +450,13 @@ def add_subparsers(parent_subprs):
                                               'available lists'))
     prs_show.add_argument('target_list', nargs='?',
                           help='Name of the list or list file')
-    prs_show.set_defaults(func_name='show')
+    prs_show.set_defaults(method='show')
 
     # womp list show_operations
     parser_show_operations = parent_subprs.add_parser('show_operations',
                                                       help='print available \
                                                       wapiti operations')
-    parser_show_operations.set_defaults(func_name='show_operations')
+    parser_show_operations.set_defaults(method='show_operations')
 
     # womp list create *listname
     prs_create = parent_subprs.add_parser('create',
@@ -463,15 +464,15 @@ def add_subparsers(parent_subprs):
                                                 ' article storage'))
     prs_create.add_argument('target_list',
                             help='name of the list or list file')
-    prs_create.set_defaults(func_name='create')
+    prs_create.set_defaults(method='create')
 
     # womp list create *listname
     prs_create = parent_subprs.add_parser('resolve',
-                                          help=('fetch page info for unresolved'
+                                          help=('fetch info for unresolved'
                                                 ' pages (not implemented)'))
     prs_create.add_argument('target_list',
                             help='name of the list or list file')
-    prs_create.set_defaults(func_name='resolve_the_unresolved')
+    prs_create.set_defaults(method='resolve_the_unresolved')
 
     # womp list *arg *listname *wapitisource
     op_prs = ArgumentParser(description='parses generic search op args.',
@@ -483,7 +484,7 @@ def add_subparsers(parent_subprs):
     op_prs.add_argument('--limit', '-l', type=int,
                         help='max number of articles',
                         default=DEFAULT_LIMIT)
-    op_prs.set_defaults(func_name='list_op')
+    op_prs.set_defaults(method='list_op')
 
     # actions
     _include_help = 'add articles to the list based on a wapiti operation'
