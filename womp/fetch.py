@@ -17,6 +17,7 @@ from wapiti import WapitiClient
 from article_list import ArticleListManager
 from dashboard import create_fetch_dashboard
 from inputs import DEFAULT_INPUTS
+import dashboard
 
 DEFAULT_EXT = '.fetch_data'
 DEFAULT_CONC = 20
@@ -95,9 +96,15 @@ class FetchManager(object):
 
     def spawn_dashboard(self):
         print 'Spawning dashboard...'
-        dashboard = create_fetch_dashboard(self)
+        sp_dashboard = create_fetch_dashboard(self)
         tpool = ThreadPool(2)
-        tpool.spawn(dashboard.serve)
+        from functools import partial
+        serve = partial(sp_dashboard.serve,
+                        use_reloader=False,
+                        static_prefix='static',
+                        port=5000,  # TODO
+                        static_path=dashboard._STATIC_PATH)
+        tpool.spawn(serve)
 
     def write(self):
         if not self.results:
@@ -140,7 +147,7 @@ class FetchManager(object):
 
 class FetchTask(Greenlet):
     def __init__(self, page_info, wapiti_client, *args, **kwargs):
-        self.page_info = page_info
+        self.page_info = page_info.get_subject_info()
         # defaults
         input_classes = kwargs.pop('input_classes', DEFAULT_INPUTS)
         input_pool = kwargs.pop('input_pool', pool.Pool())
