@@ -137,13 +137,10 @@ class ArticleHistory(Input):
     prefix = 'ah'
 
     def fetch(self):
-        content = self.wapiti.get_current_talk_content(self.info)
-        parsed = self.wapiti.get_parsed_templates(content[0])[0]
-        1 / 0
-        return [template for template in parsed
-                if template.name.lower() == 'articlehistory'
-                or template.name.lower() == 'article history']
-    '''
+        talk_content = self.wapiti.get_current_talk_content(self.info)
+        ret = talk_content[0].content
+        return ret
+
     def process(self, f_res):
         ah_text = find_article_history(f_res)
         assessment_list = find_rating(f_res, rating_type='assessment') or []
@@ -153,7 +150,7 @@ class ArticleHistory(Input):
             actions = parse_article_history(tmpl_dict)
             ah = {'actions': actions,
                   'current': tmpl_dict.get('currentstatus', 'NO').strip(' \"\'').upper(),
-                  'topic': tmpl_dict.get('topic').strip(' \"\'').capitalize(),
+                  'topic': tmpl_dict.get('topic', '').strip(' \"\'').capitalize(),
                   'itndate': parse_date(tmpl_dict.get('itndate')),
                   'dykdate': parse_date(tmpl_dict.get('dykdate')),
                   'maindate': parse_date(tmpl_dict.get('maindate')),
@@ -180,7 +177,6 @@ class ArticleHistory(Input):
                   'importance_list': importance_list,
                 })
 
-
     stats = {
         'article_history': lambda f: len(f.get('actions')),
         'oldest_action_age': lambda f: f.get('oldest_action_age', 0),
@@ -197,8 +193,4 @@ class ArticleHistory(Input):
         'importance_average': lambda f: f['importance'],
         'importance_count': lambda f: f['importance_count'],
         'importance_list': lambda f: f['importance_list']
-    }
-    '''
-    stats = {
-        'article_history': lambda f: f,
     }
