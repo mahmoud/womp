@@ -209,7 +209,7 @@ class ArticleListManager(object):
             else:
                 print 'none'
 
-    def show_operations(self):
+    def show_operations(self, **kw):
         import wapiti
         from pprint import pprint
         ret = []
