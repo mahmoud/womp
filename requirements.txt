@@ -1,11 +1,11 @@
 -e git+https://github.com/surfly/gevent.git#egg=gevent-dev
 -e git+https://github.com/mahmoud/wapiti.git#egg=wapiti
 -e git+https://github.com/mahmoud/clastic.git#egg=clastic
+-e git+https://github.com/gawel/pyquery.git#egg=pyquery
 
 Mako>=0.8.0
 cssselect>=0.7.1
 lxml>=3.0
-pyquery>=1.2.1
 python-dateutil>=2.1
 greenlet>=0.4.0
 psutil>=0.6.0
