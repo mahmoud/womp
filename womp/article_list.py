@@ -120,13 +120,12 @@ class ArticleListManager(object):
     def wapiti_client(self):
         if self.env:
             return self.env.get_wapiti_client()
-        else:
-            # testing only, I think
-            if self._wapiti_client:
-                return self._wapiti_client
-            from wapiti import WapitiClient
-            self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
+        # testing only, I think
+        if self._wapiti_client:
             return self._wapiti_client
+        from wapiti import WapitiClient
+        self._wapiti_client = WapitiClient('mahmoudrhashemi@gmail.com')
+        return self._wapiti_client
 
     def append_action(self, listname, meta_str, articles):
         new_article_list = self.load_list(listname)
@@ -164,8 +163,7 @@ class ArticleListManager(object):
         try:
             op = getattr(wc, wapiti_operation)
         except AttributeError:
-            print 'No wapiti operation', wapiti_operation
-            return
+            raise ValueError('No wapiti operation named "%s"' % wapiti_operation)
         if wapiti_param:
             page_infos = op(wapiti_param, limit=limit)
         else:

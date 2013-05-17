@@ -127,7 +127,7 @@ def create_parser():
     prs_fetch = subs.add_parser('fetch',
                                 description='gather data for articles in a given list')
     prs_fetch.set_defaults(action_group='fetch')
-    fetch.add_subparsers(prs_fetch.add_subparsers())
+    fetch.create_parser(prs_fetch)
 
     return prs
 

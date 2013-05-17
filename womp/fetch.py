@@ -72,6 +72,8 @@ class FetchManager(object):
     def load_list(self, name):
         self.name = name
         article_list = self.alm.load_list(name)
+        if article_list is None:
+            raise ValueError('no article list named "%s"' % (name,))
         self.articles = article_list.get_articles()
 
     def run_fetch(self, use_dashboard=False):
@@ -92,6 +94,26 @@ class FetchManager(object):
             ft.link(self._on_fetch_task_complete)
             self.pool.start(ft)
         self.pool.join()
+
+    def fetch_list(self,
+                   target_list_name,
+                   no_dashboard=False,
+                   no_pdb=False,
+                   **kw):
+        if isinstance(target_list_name, list):
+            target_list_name = target_list_name[0]  # dammit argparse
+        self.load_list(target_list_name)
+        self.run_fetch()
+
+        use_dashboard = not no_dashboard
+        self.load_list(target_list_name)
+        self.run_fetch(use_dashboard=use_dashboard)
+        if save:
+            self.write()
+        if not no_pdb:  # double negative for easier cli
+            import pdb;
+            pdb.set_trace()
+        return
 
     def spawn_dashboard(self):
         print 'Spawning dashboard...'
@@ -218,44 +240,30 @@ class FetchTask(Greenlet):
         return ret
 
 
-def add_subparsers(subparsers):
-    parser_fetch = subparsers.add_parser('fetch')
-    parser_fetch.add_argument('target_list_name', nargs='?',
-                              help='Name of the list or list file')
-    parser_fetch.add_argument('--save', help='save fetch results',
-                              action='store_true')
-    parser_fetch.add_argument('--no_pdb', help='end with pdb',
-                              action='store_true')
-    parser_fetch.add_argument('--no_dashboard', help='do not spawn dashboard',
-                              action='store_true')
-    parser_fetch.set_defaults(func=arg_fetch_list)
-    return
-
-
-def create_parser():
-    """
+def create_parser(prs=None):
+    """\
     Only called when fetch is used directly (i.e., when there
     is no WompEnv).
+
+    Takes an optional starting parser to be augmented instead of
+    creating a new parser from scratch.
+
     """
-    root_parser = ArgumentParser(description='article fetch')
-    root_parser.add_argument('--list_home', help='list lookup directory')
-    add_subparsers(root_parser.add_subparsers())
-    return root_parser
+    if prs is None:
+        prs = ArgumentParser(description='article fetch')
+        prs.add_argument('--list_home', help='list lookup directory')
+        prs.add_argument('--fetch_home', help='path to store fetched data')
 
-
-def arg_fetch_list(target_list_name,
-                   list_home=None,
-                   save=False,
-                   no_pdb=False,
-                   no_dashboard=False):
-    use_dashboard = not no_dashboard
-    fm = FetchManager(list_home)
-    fm.load_list(target_list_name)
-    fm.run_fetch(use_dashboard=use_dashboard)
-    if save:
-        fm.write()
-    if not no_pdb:  # double negative for easier cli
-        import pdb; pdb.set_trace()
+    prs.add_argument('target_list_name', nargs=1,
+                     help='Name of the list or list file')
+    prs.add_argument('--save', help='save fetch results',
+                     action='store_true')
+    prs.add_argument('--no_pdb', help='end with pdb',
+                     action='store_true')
+    prs.add_argument('--no_dashboard', help='do not spawn dashboard',
+                     action='store_true')
+    prs.set_defaults(method='fetch_list')
+    return prs
 
 
 def main():
@@ -265,18 +273,12 @@ def main():
     except SystemExit:
         parser.print_help()
         print
-    else:
-        kwargs = dict(args._get_kwargs())
-        func = kwargs.pop('func')
-        func(**kwargs)
 
-
-def _main():
-    fm = FetchManager()
-    fm.load_list('test_coffee')
-    test_page = [f for f in fm.articles][0]
-    fm.run_fetch()
-    import pdb; pdb.set_trace()
+    fm = FetchManager(args.list_home)
+    kwargs = dict(args._get_kwargs())
+    method_name = kwargs.pop('method')
+    method = getattr(fm, method_name)
+    method(**kwargs)
 
 
 if __name__ == '__main__':
