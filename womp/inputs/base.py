@@ -1,7 +1,9 @@
 import time
 from gevent.greenlet import Greenlet
 
+
 class StrException(unicode): pass
+
 
 class Input(Greenlet):
 
@@ -61,9 +63,6 @@ class Input(Greenlet):
         raise NotImplemented  # TODO: convert to abstract class?
 
     def process(self, fetch_results):
-        if self.debug:
-            # print '~~', self.info.title, ':', 'processing', self.class_name
-            pass
         ret = {}
         for k, func in self.stats.iteritems():
             try:
@@ -73,6 +72,9 @@ class Input(Greenlet):
             try:
                 res = func(fetch_results)
             except Exception as e:
+                if self.debug:
+                    import traceback
+                    traceback.print_exc()
                 ret[full_key] = e
             else:
                 ret[full_key] = res
@@ -108,4 +110,3 @@ class Input(Greenlet):
 
 class WikipediaInput(Input):
     pass
-
