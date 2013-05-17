@@ -117,13 +117,11 @@ class FetchManager(object):
         print 'Spawning dashboard...'
         sp_dashboard = create_fetch_dashboard(self)
         tpool = ThreadPool(2)
-        from functools import partial
-        serve = partial(sp_dashboard.serve,
-                        use_reloader=False,
-                        static_prefix='static',
-                        port=5000,  # TODO
-                        static_path=dashboard._STATIC_PATH)
-        tpool.spawn(serve)
+        tpool.spawn(sp_dashboard.serve,
+                    use_reloader=False,
+                    static_prefix='static',
+                    port=5000,  # TODO
+                    static_path=dashboard._STATIC_PATH)
 
     def write(self):
         if not self.results:
