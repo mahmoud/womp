@@ -2,9 +2,6 @@ import time
 from gevent.greenlet import Greenlet
 
 
-class StrException(unicode): pass
-
-
 class Input(Greenlet):
 
     retries = 3
@@ -89,8 +86,12 @@ class Input(Greenlet):
             try:
                 self.fetch_results = self.fetch()
             except Exception as e:
-                e_msg = u"Fetch failed on {i_t} input for article {p_t} ({p_id}) with exception {e}"
-                e_msg = e_msg.format(p_t=self.info.title, p_id=self.info.page_id, i_t=self.class_name, e=repr(e))
+                e_msg = (u'Fetch failed on {i_t} input for '
+                         'article {p_t} ({p_id}) with exception {e}')
+                e_msg = e_msg.format(p_t=self.info.title,
+                                     p_id=self.info.page_id,
+                                     i_t=self.class_name,
+                                     e=repr(e))
                 print e_msg
                 #import pdb;pdb.post_mortem()
             else:
