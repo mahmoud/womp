@@ -14,10 +14,13 @@ from gevent.greenlet import Greenlet
 from gevent.threadpool import ThreadPool
 
 from wapiti import WapitiClient
+
 from article_list import ArticleListManager
 from dashboard import create_fetch_dashboard
 from inputs import DEFAULT_INPUTS
+from utils import get_decoded_kwargs, rotated_sequence
 import dashboard
+
 
 DEFAULT_EXT = '.fetch_data'
 DEFAULT_CONC = 20
@@ -25,12 +28,6 @@ DEFAULT_LIMITS = {
     # Backlinks: 100,
     # FeedbackV4: 100,
 }
-
-
-def rotated_sequence(seq, start_index):
-    n = len(seq)
-    for i in xrange(n):
-        yield seq[(i + start_index) % n]
 
 
 class FancyInputPool(pool.Pool):
@@ -276,9 +273,10 @@ def main():
     except SystemExit:
         parser.print_help()
         print
+        raise
 
-    fm = FetchManager(args.list_home)
-    kwargs = dict(args._get_kwargs())
+    kwargs = get_decoded_kwargs(args)
+    fm = FetchManager(kwargs.get('list_home'))
     method_name = kwargs.pop('method')
     method = getattr(fm, method_name)
     method(**kwargs)

@@ -13,6 +13,12 @@ def get_decoded_kwargs(args):
     return kwargs
 
 
+def rotated_sequence(seq, start_index):
+    n = len(seq)
+    for i in xrange(n):
+        yield seq[(i + start_index) % n]
+
+
 def get_max_width(table, index):
     """Get the maximum width of the given column index"""
     return max([len(str(row[index])) for row in table])
