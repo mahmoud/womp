@@ -138,8 +138,9 @@ class ArticleHistory(Input):
 
     def fetch(self):
         talk_content = self.wapiti.get_current_talk_content(self.info)
-        ret = talk_content[0].content
-        return ret
+        if not talk_content:
+            return ''
+        return talk_content[0].content
 
     def process(self, f_res):
         ah_text = find_article_history(f_res)
