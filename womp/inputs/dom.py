@@ -46,6 +46,7 @@ def section_stats(headers):
 def get_sections(pq):
     dist = {}
     depth = {}
+    avg = 0
     total_words = 0.0
     weighted_total = 0.0
     headers = ['h2', 'h3', 'h4', 'h5', 'h6', 'h7']
