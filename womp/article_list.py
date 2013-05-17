@@ -8,6 +8,7 @@ import codecs
 from datetime import datetime
 from collections import namedtuple, OrderedDict
 from argparse import ArgumentParser
+from wapiti.operations.models import PageInfo
 
 DEFAULT_LIMIT = 100
 DEFAULT_SOURCE = 'enwiki'
@@ -18,7 +19,6 @@ DATE_FORMAT = '%Y-%m-%dT%H:%M:%S'
 DEFAULT_EXT = '.txt'
 TEST_LIST_NAME = 'test_list'
 
-PageInfo = namedtuple('PageInfo', 'title page_id ns subject_id talk_id')
 UnresolvedPage = namedtuple('UnresolvedPage', 'title')
 
 
@@ -405,11 +405,17 @@ def print_page_info(pi):
     return ret + u'\n'
 
 
-def parse_page_info(raw_pi):
+def parse_page_info(raw_pi, source):
     try:
         title, page_id, ns, subject_id, talk_id = json.loads(raw_pi)
-        ret = PageInfo(title, page_id, ns, subject_id, talk_id)
-    except ValueError:
+        ret = PageInfo(title=title,
+                       page_id=page_id,
+                       ns=ns,
+                       subject_id=subject_id,
+                       talk_id=talk_id,
+                       source=source)
+    except ValueError as ve:
+        import pdb;pdb.post_mortem()
         ret = UnresolvedPage(raw_pi)
     return ret
 
@@ -434,7 +440,7 @@ def al_parse(contents):
                 # no action metadata
                 ret_actions.append(ListAction('include'))
             try:
-                page = parse_page_info(line)
+                page = parse_page_info(line, source=ret_actions[-1].source)
             except ValueError:
                 pass  # cannot parse line?
             ret_actions[-1].articles.append(page)
