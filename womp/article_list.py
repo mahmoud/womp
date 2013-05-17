@@ -8,6 +8,9 @@ import codecs
 from datetime import datetime
 from collections import namedtuple, OrderedDict
 from argparse import ArgumentParser
+
+from utils import pprint_table, get_decoded_kwargs
+
 from wapiti.operations.models import PageInfo
 
 DEFAULT_LIMIT = 100
@@ -20,31 +23,6 @@ DEFAULT_EXT = '.txt'
 TEST_LIST_NAME = 'test_list'
 
 UnresolvedPage = namedtuple('UnresolvedPage', 'title')
-
-
-def get_max_width(table, index):
-    """Get the maximum width of the given column index"""
-    return max([len(str(row[index])) for row in table])
-
-
-def pprint_table(table):
-    """Prints out a table of data, padded for alignment
-    @param out: Output stream (file-like object)
-    @param table: The table to print. A list of lists.
-    Each row must have the same number of columns. """
-    col_paddings = []
-
-    for i in range(len(table[0])):
-        col_paddings.append(get_max_width(table, i))
-
-    for row in table:
-        # left col
-        print str(row[0]).ljust(col_paddings[0] + 1),
-        # rest of the cols
-        for i in range(1, len(row)):
-            col = str(row[i]).rjust(col_paddings[i] + 2)
-            print col,
-        print
 
 
 class ArticleListManager(object):
@@ -415,7 +393,6 @@ def parse_page_info(raw_pi, source):
                        talk_id=talk_id,
                        source=source)
     except ValueError as ve:
-        import pdb;pdb.post_mortem()
         ret = UnresolvedPage(raw_pi)
     return ret
 
@@ -526,15 +503,9 @@ def main():
     parser = create_parser()
     if len(sys.argv) == 1:
         parser.print_help()
-        print ''
+        print
     args = parser.parse_args()
-    kwargs = dict(args._get_kwargs())
-    for k, v in kwargs.items():
-        if not isinstance(v, unicode):
-            try:
-                kwargs[k] = v.decode(sys.stdin.encoding)
-            except AttributeError:
-                pass
+    kwargs = get_decoded_kwargs(args)
 
     list_home = kwargs.pop('list_home', None)
     alm = ArticleListManager(list_home)
