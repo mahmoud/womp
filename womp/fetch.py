@@ -103,9 +103,6 @@ class FetchManager(object):
                    **kw):
         if isinstance(target_list_name, list):
             target_list_name = target_list_name[0]  # dammit argparse
-        self.load_list(target_list_name)
-        self.run_fetch()
-
         use_dashboard = not no_dashboard
         self.load_list(target_list_name)
         self.run_fetch(use_dashboard=use_dashboard)
@@ -130,7 +127,8 @@ class FetchManager(object):
 
     def write(self):
         if not self.results:
-            raise('no results!')
+            print 'no results, nothing to save'
+            return
         print 'Writing...'
         print 'Total results:', len(self.results)
         print 'Incomplete results:', len([f for f in self.result_stats
