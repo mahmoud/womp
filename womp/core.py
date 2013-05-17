@@ -9,7 +9,10 @@ from argparse import ArgumentParser
 import fetch
 import article_list
 import dashboard
+from utils import get_decoded_kwargs
+
 from wapiti import WapitiClient
+
 
 _DEFAULT_DIR_PERMS = 0755
 _CURDIR = os.path.abspath(os.path.dirname(__file__))
@@ -130,18 +133,6 @@ def create_parser():
     fetch.create_parser(prs_fetch)
 
     return prs
-
-
-def get_decoded_kwargs(args):
-    import sys
-    kwargs = dict(args._get_kwargs())
-    for k, v in kwargs.items():
-        if not isinstance(v, unicode):
-            try:
-                kwargs[k] = v.decode(sys.stdin.encoding)
-            except AttributeError:
-                pass
-    return kwargs
 
 
 def main():
