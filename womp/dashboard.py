@@ -28,7 +28,7 @@ def article_list(list_manager):
     return {'article_lists': list_manager.get_list_dicts()}
 
 
-def input_server(input_name, title=None, wapiti_client=None):
+def input_server(input_name, title=None, wapiti_client=None, debug=True):
     wc = wapiti_client or WapitiClient('test@example.com')
     title = title or 'Coffee'
     page_info = wc.get_page_info(title)[0]
@@ -36,7 +36,7 @@ def input_server(input_name, title=None, wapiti_client=None):
         input_type = AVAIL_INPUTS[input_name.lower()]
     except KeyError:
         raise ValueError('No input found with name %r' % (input_name,))
-    input_task = input_type(page_info, wc)
+    input_task = input_type(page_info, wc, debug=debug)
     result = input_task()
     if not getattr(input_task, 'status', {}).get('is_successful'):
         raise RuntimeError('input error detected')
