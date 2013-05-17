@@ -141,7 +141,7 @@ def wording_counts(pq):
     ret['word_count'] = len(pq('p').text().split())
     ret['p_count'] = len(pq('div#content p'))
     ret['ref_count'] = len(pq('sup[id^="cite_ref"]'))
-    ret['word_per_ref'] = ret['word_count'] / float(ret['ref_count'])
+    ret['word_per_ref'] = float(ret['ref_count']) and ret['word_count'] / float(ret['ref_count'])
     ret['p_wo_cites'] = len([p for p in pq('div#content p') if not len(PyQuery(p).find('sup[id^="cite_ref"]'))])
     return ret
 
