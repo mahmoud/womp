@@ -84,7 +84,7 @@ class FetchManager(object):
         self.wapiti_client = WapitiClient('makuro@makuro.org')  # todo: config
         if self.dashboard:
             self.spawn_dashboard()
-        print 'Creating Loupes for', len(self.articles), 'articles...'
+        print 'Fetching data for', len(self.articles), 'articles...'
         for i, ai in enumerate(self.articles):
             ft = FetchTask(ai,
                            self.wapiti_client,
