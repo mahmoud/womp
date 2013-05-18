@@ -47,40 +47,38 @@ class FancyInputPool(pool.Pool):
         return
 
 
-class FetchManager(object):
-    def __init__(self, env_or_path=None, debug=True):
-        self.alm = ArticleListManager(env_or_path)
-        if not env_or_path or isinstance(env_or_path, basestring):
-            self.env = None
-            defpath = env_or_path or os.getenv('WOMP_FETCH_HOME') \
-                or os.getcwd()
-            self._home = defpath
-        else:
-            self.env = env_or_path
-            self._home = self.env.fetch_home
-        self.debug = debug
+class FetchJob(object):
+    def __init__(self,
+                 articles,
+                 inputs,
+                 task_pool=None,
+                 input_pool=None,
+                 wapiti_client=None,
+                 **kw):
+        self.debug = kw.pop('debug', True)
+        concurrency = kw.pop('concurrency', DEFAULT_CONC)
+        if kw:
+            raise TypeError('unexpected keyword arguments %r' % (kw.keys(),))
+        if task_pool is None:
+            self.task_pool = pool.Pool(concurrency)
+        self.concurrency = self.task_pool.size
+        self.pool = self.task_pool  # TODO: tmp
+        if input_pool is None:
+            input_pool = FancyInputPool(DEFAULT_LIMITS)
+        self.input_pool = input_pool
+
+        self.articles = articles
+        self.inputs = inputs
+        self.wapiti_client = wapiti_client
         self.results = []
         self.result_stats = []
-        self.concurrency = DEFAULT_CONC
-        self.limits = DEFAULT_LIMITS
-        self.inputs = DEFAULT_INPUTS
-        self.input_pool = FancyInputPool(self.limits)
-        self.pool = pool.Pool(self.concurrency)
 
-    def load_list(self, name):
-        self.name = name
-        article_list = self.alm.load_list(name)
-        if article_list is None:
-            raise ValueError('no article list named "%s"' % (name,))
-        self.articles = article_list.get_articles()
-
-    def run_fetch(self, use_dashboard=False):
+    def run(self, use_dashboard=False):
         self.start_time = time.time()
         self.dashboard = use_dashboard
-        print 'Booting up wapiti...'
-        self.wapiti_client = WapitiClient('makuro@makuro.org')  # todo: config
-        if self.dashboard:
-            self.spawn_dashboard()
+        if self.wapiti_client is None:
+            print 'Booting up wapiti...'
+            self.wapiti_client = WapitiClient('womp@hatnote.com')  # todo: config
         print 'Fetching data for', len(self.articles), 'articles...'
         for i, ai in enumerate(self.articles):
             ft = FetchTask(ai,
@@ -90,50 +88,8 @@ class FetchManager(object):
                            order=i,
                            debug=self.debug)
             ft.link(self._on_fetch_task_complete)
-            self.pool.start(ft)
-        self.pool.join()
-
-    def fetch_list(self,
-                   target_list_name,
-                   no_dashboard=False,
-                   no_pdb=False,
-                   **kw):
-        if isinstance(target_list_name, list):
-            target_list_name = target_list_name[0]  # dammit argparse
-        use_dashboard = not no_dashboard
-        self.load_list(target_list_name)
-        self.run_fetch(use_dashboard=use_dashboard)
-        if save:
-            self.write()
-        if not no_pdb:  # double negative for easier cli
-            import pdb;
-            pdb.set_trace()
-        return
-
-    def spawn_dashboard(self):
-        print 'Spawning dashboard...'
-        sp_dashboard = create_fetch_dashboard(self)
-        tpool = ThreadPool(2)
-        tpool.spawn(sp_dashboard.serve,
-                    use_reloader=False,
-                    static_prefix='static',
-                    port=5000,  # TODO
-                    static_path=dashboard._STATIC_PATH)
-
-    def write(self):
-        if not self.results:
-            print 'no results, nothing to save'
-            return
-        print 'Writing...'
-        print 'Total results:', len(self.results)
-        print 'Incomplete results:', len([f for f in self.result_stats
-                                          if not f['is_successful']])
-        output_name = os.path.join(self._home, self.name + DEFAULT_EXT)
-        output_file = codecs.open(output_name, 'w', 'utf-8')
-        for result in self.results:
-            output_file.write(json.dumps(result, default=str))
-            output_file.write('\n')
-        output_file.close()
+            self.task_pool.start(ft)
+        self.task_pool.join()
 
     def _on_fetch_task_complete(self, fetch_task):
         results = fetch_task.results
@@ -158,6 +114,73 @@ class FetchManager(object):
         msg_params['total'] = len(self.articles)
         return u'#{num}/{total} (#{order}) "{title}" took {dur:.4f} seconds'\
                .format(**msg_params)
+
+
+class FetchManager(object):
+    def __init__(self, env_or_path=None, debug=True):
+        self.alm = ArticleListManager(env_or_path)
+        if not env_or_path or isinstance(env_or_path, basestring):
+            self.env = None
+            defpath = env_or_path or os.getenv('WOMP_FETCH_HOME') \
+                or os.getcwd()
+            self._home = defpath
+        else:
+            self.env = env_or_path
+            self._home = self.env.fetch_home
+        self.debug = debug
+        self.inputs = DEFAULT_INPUTS
+
+    def load_list(self, name):
+        article_list = self.alm.load_list(name)
+        if article_list is None:
+            raise ValueError('no article list named "%s"' % (name,))
+        return article_list.get_articles()
+
+    def create_job(self, article_list):
+        return FetchJob(article_list, self.inputs)
+
+    def fetch_list(self,
+                   target_list_name,
+                   no_dashboard=False,
+                   no_pdb=False,
+                   **kw):
+        if isinstance(target_list_name, list):
+            target_list_name = target_list_name[0]  # dammit argparse
+        article_list = self.load_list(target_list_name)
+        fetch_job = self.create_job(article_list)
+        fetch_job.name = target_list_name  # TODO: tmp
+        if not no_dashboard:
+            self.spawn_dashboard(fetch_job)
+        fetch_job.run()
+        if not no_pdb:  # double negative for easier cli
+            import pdb
+            pdb.set_trace()
+        return
+
+    def spawn_dashboard(self, job):
+        print 'Spawning dashboard...'
+        sp_dashboard = create_fetch_dashboard(job)
+        tpool = ThreadPool(2)
+        tpool.spawn(sp_dashboard.serve,
+                    use_reloader=False,
+                    static_prefix='static',
+                    port=5000,  # TODO
+                    static_path=dashboard._STATIC_PATH)
+
+    def write(self):
+        if not self.results:
+            print 'no results, nothing to save'
+            return
+        print 'Writing...'
+        print 'Total results:', len(self.results)
+        print 'Incomplete results:', len([f for f in self.result_stats
+                                          if not f['is_successful']])
+        output_name = os.path.join(self._home, self.name + DEFAULT_EXT)
+        output_file = codecs.open(output_name, 'w', 'utf-8')
+        for result in self.results:
+            output_file.write(json.dumps(result, default=str))
+            output_file.write('\n')
+        output_file.close()
 
 
 class FetchTask(Greenlet):
