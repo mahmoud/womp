@@ -44,39 +44,39 @@ def input_server(input_name, title=None, wapiti_client=None, debug=True):
     return result
 
 
-def fetch_task_dashboard(fetch_manager):
+def fetch_task_dashboard(fetch_job):
     cur_time = time.time()
     fetch_failures = ff = defaultdict(list)
     process_failures = pf = defaultdict(list)
-    success_count = len([o for o in fetch_manager.result_stats
+    success_count = len([o for o in fetch_job.result_stats
                          if o['is_successful']])
-    failure_count = len(fetch_manager.result_stats) - success_count
+    failure_count = len(fetch_job.result_stats) - success_count
     in_prog_times = dict([(o.page_info.title, cur_time - o.times['create'])
-                          for o in fetch_manager.pool])
+                          for o in fetch_job.task_pool])
     start_time = time.strftime("%d %b %Y %H:%M:%S UTC",
-                               time.gmtime(fetch_manager.start_time)),
-    for inp in fetch_manager.inputs:
+                               time.gmtime(fetch_job.start_time)),
+    for inp in fetch_job.inputs:
         inp_name = inp.__name__
-        ff[inp_name].extend([f['title'] for f in fetch_manager.result_stats
+        ff[inp_name].extend([f['title'] for f in fetch_job.result_stats
                              if not f['inputs'][inp_name]['fetch_succeeded']])
         # todo: safe specific process errors; display in dashboard
-        pf[inp_name].extend([f['title'] for f in fetch_manager.result_stats
+        pf[inp_name].extend([f['title'] for f in fetch_job.result_stats
                              if f['inputs'][inp_name]['fetch_succeeded'] and
                              not f['inputs'][inp_name]['is_successful']])
-    ret = {'in_progress_count': len(fetch_manager.pool),
+    ret = {'in_progress_count': len(fetch_job.task_pool),
            'in_progress': in_prog_times,
-           'complete_count': len(fetch_manager.results),
+           'complete_count': len(fetch_job.results),
            'success_count': success_count,
            'failure_count': failure_count,
-           'total_articles': len(fetch_manager.articles),
-           'input_classes': [i.__name__ for i in fetch_manager.inputs],
-           'in_progress': [o.get_status() for o in fetch_manager.pool],
-           'complete_times': fetch_manager.result_stats,
+           'total_articles': len(fetch_job.articles),
+           'input_classes': [i.__name__ for i in fetch_job.inputs],
+           'in_progress': [o.get_status() for o in fetch_job.task_pool],
+           'complete_times': fetch_job.result_stats,
            'start_time': start_time,
-           'duration': time.time() - fetch_manager.start_time,
+           'duration': time.time() - fetch_job.start_time,
            'fetch_failures': fetch_failures,
            'process_failures': process_failures,
-           'name': fetch_manager.name}
+           'name': fetch_job.name}
     return ret
 
 
@@ -89,10 +89,10 @@ def create_input_server(wapiti_client=None):
     return Application(routes, resources, mako_render)
 
 
-def create_fetch_dashboard(fetch_manager):
+def create_fetch_dashboard(fetch_job):
     routes = [('/', fetch_task_dashboard, 'dashboard.html'),
               ('/json', fetch_task_dashboard, dev_json_response)]
-    resources = {'fetch_manager': fetch_manager}
+    resources = {'fetch_job': fetch_job}
     mako_render = MakoRenderFactory(_TEMPLATE_PATH)
     return Application(routes, resources, mako_render)
 
@@ -100,7 +100,7 @@ def create_fetch_dashboard(fetch_manager):
 def create_dashboard(womp_env):
     wapiti_client = womp_env.get_wapiti_client()
     input_server = create_input_server(wapiti_client)
-    fetch_dashboard = create_fetch_dashboard(womp_env.fetch_manager)
+    fetch_dashboard = create_fetch_dashboard(womp_env.fetch_manager)  # TODO
     resources = {'womp_env': womp_env,
                  'list_manager': womp_env.list_manager}
     routes = [('/', fetch_dashboard),

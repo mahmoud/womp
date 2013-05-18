@@ -62,7 +62,6 @@ class FetchJob(object):
         if task_pool is None:
             self.task_pool = pool.Pool(concurrency)
         self.concurrency = self.task_pool.size
-        self.pool = self.task_pool  # TODO: tmp
         if input_pool is None:
             input_pool = FancyInputPool(DEFAULT_LIMITS)
         self.input_pool = input_pool
