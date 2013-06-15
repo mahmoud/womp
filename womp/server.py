@@ -38,7 +38,7 @@ def article_list():
 def start_fetch(listname, port):
     fm = FetchManager()  # include env
     fm.load_list(listname)
-    fm.run(port=port)
+    fm.fetch_list(listname, port=port)
     return fm.results
 
 
@@ -49,7 +49,7 @@ def fetch_controller(listname):
         tpool.spawn(start_fetch, listname, port)
         ret = {'port': port,
                'name': listname,
-               'url': 'http://localhost:' + str(port) + '/dashboard',
+               'url': 'http://localhost:' + str(port),
                'status': 'running'}
     else:
         ret = {'port': port,

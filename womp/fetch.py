@@ -28,6 +28,7 @@ DEFAULT_LIMITS = {
     # Backlinks: 100,
     # FeedbackV4: 100,
 }
+DEFAULT_PORT = 1870
 
 
 class FancyInputPool(pool.Pool):
@@ -142,6 +143,7 @@ class FetchManager(object):
                    target_list_name,
                    no_dashboard=False,
                    no_pdb=False,
+                   port=DEFAULT_PORT,
                    **kw):
         if isinstance(target_list_name, list):
             target_list_name = target_list_name[0]  # dammit argparse
@@ -149,21 +151,21 @@ class FetchManager(object):
         fetch_job = self.create_job(article_list)
         fetch_job.name = target_list_name  # TODO: tmp
         if not no_dashboard:
-            self.spawn_dashboard(fetch_job)
+            self.spawn_dashboard(fetch_job, port=port)
         fetch_job.run()
         if not no_pdb:  # double negative for easier cli
             import pdb
             pdb.set_trace()
         return
 
-    def spawn_dashboard(self, job):
+    def spawn_dashboard(self, job, port):
         print 'Spawning dashboard...'
         sp_dashboard = create_fetch_dashboard(job)
         tpool = ThreadPool(2)
         tpool.spawn(sp_dashboard.serve,
                     use_reloader=False,
                     static_prefix='static',
-                    port=5000,  # TODO
+                    port=port,
                     static_path=dashboard._STATIC_PATH)
 
     def write(self):
