@@ -99,11 +99,35 @@ def list_editor_remove(request):
     alm.append_action(listname, meta, article_list)
     return redirect('/list_editor/' + listname)
 
+def list_create(listname, request):
+    alm = ArticleListManager()
+    try:
+        alm.create(listname)
+        thelist = alm.load_list(listname)
+    except IOError as e:
+        return {
+            'error': str(e),
+            'code': 409
+        }
+    except ValueError as e:
+        return {
+            'error': str(e),
+            'code': 400
+        }
+
+    return {
+        'name': listname,
+        'articles': len(thelist._get_unresolved_articles()),
+        'actions': len(thelist.actions),
+        'date': thelist.file_metadata.get('date', 'new')
+    }
+
 mako_render = MakoRenderFactory(os.path.join(os.getcwd(), 'templates'))
 routes = [('/start_fetch/<listname>', fetch_controller, json_response),
           ('/list_editor/<listname>', list_editor, 'list_editor.html'),
           ('/list_editor/submit', list_editor_submit, json_response),
           ('/list_editor/remove', list_editor_remove, json_response),
+          ('/list_create/<listname>', list_create, json_response),
           ('/', article_list, 'index.html')]
 
 

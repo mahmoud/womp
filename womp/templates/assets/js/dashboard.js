@@ -1,4 +1,3 @@
-
 var DASH = (function ($) {
     var DASH = {};
     $(document).ready(function() {
@@ -9,6 +8,10 @@ var DASH = (function ($) {
             else {
                 DASH.stop_reload();
             }
+        });
+
+        $('#add-new-list').click(function () {
+            DASH.create_list_menu($(this));
         });
     });
 
@@ -48,6 +51,93 @@ var DASH = (function ($) {
         rate = rate || 221;
         DASH.ajax_refresh('', '', rate);
     };
+
+    DASH.create_list_menu = function create_list_menu($link) {
+        function destructMe() {
+            $interface.remove();
+        }
+
+        function setErr(msg) {
+            $interface.find( '.error' ).remove();
+            $err = $('<span>', {'class': 'error'}).text(msg);
+            $interface.append($err);
+        }
+
+        var $interface = $('<div>'),
+            $field = $('<input>', {
+                type: 'text',
+                id: 'create-a-list',
+                name: 'list_name'
+            }),
+            $button = $('<button>', {
+                type: 'button',
+                id: 'create-list-submit'
+            }).text( 'Create!' ),
+            $cancel = $('<button>', {
+                type: 'cancel',
+                id: 'create-list-cancel'
+            }).text( 'Cancel' );
+
+        $button.click(function () {
+            if ($field.val() === '') {
+                setErr('Please enter a list name.');
+            } else {
+                DASH.create_list($field.val(), destructMe, setErr );
+            }
+        });
+
+        $cancel.click(destructMe);
+
+        $interface.append(
+            $field,
+            $button,
+            $cancel
+        );
+
+        $link.after($interface);
+    };
+
+    DASH.create_list = function create_list(name, cb, err) {
+        $.ajax(
+            '/list_create/' + name,
+            {
+                method: 'PUT',
+                success: function (data) {
+                    if (data.error) {
+                        err(data.error);
+                    } else {
+                        DASH.add_new_row(data);
+                        cb();
+                    }
+                }
+            }
+        );
+    };
+
+    DASH.add_new_row = function add_new_row(list) {
+        var $row = $('<tr>'),
+            $namecell = $('<td>'),
+            $name = $('<a>', {href: '/list_editor/' + list.name}).text(list.name),
+            $articles = $('<td>').text(list.articles),
+            $actions = $('<td>').text(list.actions),
+            $date = $('<td>').text(list.date),
+            $commands = $('<td>', {id: list.name + '-controls'}),
+            $gather = $('<a>', {id: list.name + '-gather', href: '#'}).text('Gather data');
+
+        $commands.html($gather);
+        $namecell.html($name);
+
+        $row.append(
+            $namecell,
+            $articles,
+            $actions,
+            $date,
+            $commands
+        );
+
+        $('#in-prog-table').append($row);
+    };
+
     return DASH;
 }(jQuery));
 

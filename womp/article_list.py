@@ -197,7 +197,7 @@ class ArticleListManager(object):
 
     def create(self, target_list, **kw):
         existent = self.load_list(target_list)
-        if existent:
+        if existent is not None:
             raise IOError('list already exists: %s' % target_list)
         if not target_list or '.' in target_list:
             raise ValueError('expected non-empty string without dots')
