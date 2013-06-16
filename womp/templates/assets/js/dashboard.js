@@ -4,6 +4,10 @@ var DASH = (function ($) {
     };
 
     $(document).ready(function() {
+        if ($('#autorefresh').is(':checked')) {
+            DASH.start_reload();
+        }
+
         $('#autorefresh').click(function() {
             if ($(this).is(':checked')){
                 DASH.start_reload();
@@ -20,6 +24,79 @@ var DASH = (function ($) {
         $('.article-list-row').each(function () {
             DASH.articleLists.push(ArticleList.fromTableRow($(this)));
         });
+
+        $('form#remove_articles').submit(function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var $this = $(this),
+                opts = {type: $this.attr('method'), data: {}},
+                $toRemove = $this.find('input.article-choice:checked');
+
+            $toRemove.each(function () {
+                var $check = $(this);
+                opts.data[$check.attr('name')] = 'remove';
+            });
+
+            opts.success = function () {
+                $toRemove.closest('.article_set_list').remove();
+            };
+
+            $.ajax($this.attr('action'), opts);
+        });
+
+        $('form#new_action').submit(function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var $this = $(this),
+                opts = {type: $this.attr('method'), data: {}},
+                $text = $this.find('textarea[name=articles]'),
+                text = $text.val(),
+                articles = text.split('\n'),
+                existing = {};
+
+            opts.data.articles = text;
+            opts.data.meta = $this.find('textarea[name=meta]').text();
+            if ( $this.find('input[name=resolve]').is('checked') ) {
+                opts.data.resolve = 'True';
+            }
+
+            $('input.article-choice').each(function () {
+                existing[$(this).attr('id')] = true;
+            });
+
+            opts.success = function () {
+                $text.val('');
+
+                var i, $li, $input, $label,
+                    $list = $('form#remove_articles').find('ul');
+
+                for (i = 0; i < articles.length; i++) {
+                    if (existing[articles[i]] === true) {
+                        continue;
+                    }
+
+                    $li = $('<li>', {'class': 'article_set_list'});
+                    $input = $('<input>', {
+                        'class': 'article-choice',
+                        type: 'checkbox',
+                        name: articles[i],
+                        id: articles[i],
+                        value: 'remove'
+                    });
+                    $label = $('<label>', {'for': articles[i]}).text(articles[i]);
+                    $li.append(
+                        $input,
+                        ' ',
+                        $label
+                    );
+                    $list.append($li);
+                }
+            };
+
+            $.ajax($this.attr('action'), opts);
+        });
     });
 
 
@@ -29,15 +106,17 @@ var DASH = (function ($) {
         repeat_delay = repeat_delay || null;
         $(div_selector).load(document.URL + ' ' + div_selector, function(res, status, xhr) {
             if (status !== 'success') {
-                clearTimeout(DASH['reload']);
+                DASH.stop_reload();
                 $('#autorefresh').prop('checked', false);
             } else {
                 if (repeat_delay) {
                     if ($('#autorefresh').is(':checked')){
-                        DASH['reload'] = setTimeout(function() { ajax_refresh(div_selector, url, repeat_delay); }, repeat_delay);
+                        DASH.reload = setTimeout(function() {
+                            DASH.ajax_refresh(div_selector, url, repeat_delay);
+                        }, repeat_delay);
                     } else {
                         // hmmm, sometimes it doesn't respond to my click... this should stop it
-                        clearTimeout(DASH['reload']);
+                        DASH.stop_reload();
                     }
                 }
             }
@@ -51,7 +130,7 @@ var DASH = (function ($) {
     };
 
     DASH.stop_reload = function stop_reload() {
-        clearTimeout(DASH['reload']);
+        clearTimeout(DASH.reload);
     };
 
     DASH.start_reload = function start_reload(rate) {
@@ -108,13 +187,19 @@ var DASH = (function ($) {
         $.ajax(
             '/list_create/' + name,
             {
-                method: 'PUT',
+                type: 'PUT',
                 success: function (data) {
-                    if (data.error) {
-                        err(data.error);
-                    } else {
-                        DASH.add_new_row(data);
-                        cb();
+                    DASH.add_new_row(data);
+                    cb();
+                },
+
+                // Yeah, status codes, they're awesome.
+                statusCode: {
+                    409: function () {
+                        err('That list already exists, please choose a different name.');
+                    },
+                    400: function () {
+                        err('Please enter a non-empty name with no period (.) characters.');
                     }
                 }
             }

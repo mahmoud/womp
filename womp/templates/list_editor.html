@@ -28,18 +28,17 @@
   <h2>list info</h2>
   <textarea cols='80' rows='3' readonly>${meta}</textarea>
 % endif
-<form name='remove_articles' action='/list_editor/remove' method='post'>
+<form id="remove_articles" action="/list_prune/${name}" method="POST">
 <ul>
 % for article in article_set:
-<li class='article_set_list'><input type='checkbox' name="${article.title}" id="${article.title}-cb" value='remove'> <label for="${article.title}">${article.title}</label></li>
+<li class='article_set_list'><input class="article-choice" type='checkbox' name="${article.title}" id="${article.title}" value='remove'> <label for="${article.title}">${article.title}</label></li>
 % endfor
 </ul>
-<input type='hidden' value='${name}' name='_list_name'>
 <input type='submit' value='Update article list'>
 </form>
 <h2>new action</h2>
 
-<form name='new_action' action='/list_editor/submit' method='post'>
+<form id="new_action" action='/list_edit/${name}' method='POST'>
   <textarea name='meta' cols='80' rows='3'>##{"action": "include", "date": "${time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())}", "term": ["manual action"], "source": "http://en.wikipedia.org/w/api.php"}</textarea>
   <p>add titles</p>
   <textarea name='articles' cols='80' rows='20'></textarea>
