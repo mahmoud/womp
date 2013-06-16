@@ -1,4 +1,34 @@
 var DASH = (function ($) {
+    function gatherHandle() {
+        var $this = $(this),
+            $controls = $this.closest('.controls'),
+            $row = $controls.closest('tr');
+
+        $.getJSON('/start_fetch/' + $row.attr('data-list-name'), function (data) {
+            if (data.status === 'running') {
+                $this.closest('.controls')
+                    .append('<br/><a href="' + data.url + '" target="_blank">View dashboard</a>');
+                $.getJSON(data.url + '/json', function (data) {
+                    console.log(data);
+                });
+            } else {
+                console.log('Current status: ' + data.status);
+            }
+        });
+    }
+
+    function deleteHandle() {
+        var $this = $(this),
+            $controls = $this.closest('.controls'),
+            $row = $controls.closest('tr');
+
+        $.getJSON('/list_delete/' + $row.attr('data-list-name'), function (data) {
+            if (data.success === true) {
+                $row.remove();
+            }
+        });
+    }
+
     var DASH = {};
     $(document).ready(function() {
         $('#autorefresh').click(function() {
@@ -13,6 +43,9 @@ var DASH = (function ($) {
         $('#add-new-list').click(function () {
             DASH.create_list_menu($(this));
         });
+
+        $('.gather-link').click(gatherHandle);
+        $('.delete-link').click(deleteHandle);
     });
 
 
@@ -21,7 +54,7 @@ var DASH = (function ($) {
         url = url || document.URL;
         repeat_delay = repeat_delay || null;
         $(div_selector).load(document.URL + ' ' + div_selector, function(res, status, xhr) {
-            if (status != 'success') {
+            if (status !== 'success') {
                 clearTimeout(DASH['reload']);
                 $('#autorefresh').prop('checked', false);
             } else {
@@ -115,16 +148,25 @@ var DASH = (function ($) {
     };
 
     DASH.add_new_row = function add_new_row(list) {
-        var $row = $('<tr>'),
+        var $row = $('<tr>', {'data-list-name': list.name}),
             $namecell = $('<td>'),
             $name = $('<a>', {href: '/list_editor/' + list.name}).text(list.name),
             $articles = $('<td>').text(list.articles),
             $actions = $('<td>').text(list.actions),
             $date = $('<td>').text(list.date),
-            $commands = $('<td>', {id: list.name + '-controls'}),
-            $gather = $('<a>', {id: list.name + '-gather', href: '#'}).text('Gather data');
+            $commands = $('<td>', {'class': 'controls'}),
+            $gather = $('<a>', {'class': 'gather-link', href: '#'}).text('Gather data'),
+            $delete = $('<a>', {'class': 'delete-link', href: '#'}).text('Delete');
 
-        $commands.html($gather);
+        $gather.click(gatherHandle);
+        $delete.click(deleteHandle);
+
+        $commands.append(
+            $gather,
+            $('<br>'),
+            $delete
+        );
+
         $namecell.html($name);
 
         $row.append(
@@ -140,4 +182,3 @@ var DASH = (function ($) {
 
     return DASH;
 }(jQuery));
-

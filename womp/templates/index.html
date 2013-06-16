@@ -7,22 +7,6 @@
   <script src="/static/js/jquery-1.8.1.min.js" type="text/javascript"></script>
   <script src="/static/js/dashboard.js" type="text/javascript"></script>
   <script>
-  $(document).ready(function(){
-    % for list_data in article_lists:
-    $('#${list_data['name']}-gather').live('click', function(){
-      $.getJSON('start_fetch/${list_data['name']}', function(data) {
-        if (data.status == 'running') {
-          $('#${list_data['name']}-controls').append("<br/><a href='" + data.url + "' target='_blank'>view dashboard</a>");
-          $.getJSON(data.url + '/json', function(data) {
-            console.log(data)
-          });
-        } else {
-          console.log('Current status: ' + data.status);
-        }
-      });
-    });
-    % endfor
-  });
   </script>
 </head>
 <body>
@@ -38,7 +22,7 @@
     </thead>
     <tbody>
     % for list_data in article_lists:
-        <tr>
+        <tr data-list-name="${list_data['name']}">
             <td><a href='/list_editor/${list_data['name']}'>${list_data['name']}</a></td>
             % if list_data['unresolved']:
                 <td>${list_data['total']} (${list_data['unresolved']})</td>
@@ -47,7 +31,10 @@
             % endif
             <td>${list_data['actions']}</td>
             <td>${list_data['date']}</td>
-            <td id='${list_data['name']}-controls'><a href='#' id='${list_data['name']}-gather'>Gather data</a></td>
+            <td class="controls">
+                <a href="#" class="gather-link">Gather data</a><br />
+                <a href="#" class="delete-link">Delete list</a>
+            </td>
         </tr>
     % endfor
     </tbody>
@@ -55,5 +42,4 @@
 
 <p><a href="javascript:" id="add-new-list">Create a new list</a></p>
 
-</body>
-</html>
+</body</html>

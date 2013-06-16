@@ -206,6 +206,11 @@ class ArticleListManager(object):
         codecs.open(out_filename, 'w', encoding='utf-8').close()
         print 'Created article list %s' % out_filename
 
+    def delete(self, target_list, **kw):
+        thelist = self.load_list(target_list)
+        if thelist is not None:
+            os.remove(self._lookup_path(target_list))
+
     def write(self, target_list, list_name):
         # should write be on ArticleListManager
         output = target_list.to_string()
@@ -517,7 +522,7 @@ def main():
 def create_test():
     alm = ArticleListManager()
     try:
-        os.remove(alm._lookup_path(TEST_LIST_NAME))
+        alm.delete(TEST_LIST_NAME)
     except TypeError:
         pass
     alm.create(target_list=TEST_LIST_NAME)

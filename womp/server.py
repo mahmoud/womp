@@ -122,12 +122,20 @@ def list_create(listname, request):
         'date': thelist.file_metadata.get('date', 'new')
     }
 
+def list_delete(listname, request):
+    alm = ArticleListManager()
+    alm.delete(listname)
+    return {
+        'success': True
+    }
+
 mako_render = MakoRenderFactory(os.path.join(os.getcwd(), 'templates'))
 routes = [('/start_fetch/<listname>', fetch_controller, json_response),
           ('/list_editor/<listname>', list_editor, 'list_editor.html'),
           ('/list_editor/submit', list_editor_submit, json_response),
           ('/list_editor/remove', list_editor_remove, json_response),
           ('/list_create/<listname>', list_create, json_response),
+          ('/list_delete/<listname>', list_delete, json_response),
           ('/', article_list, 'index.html')]
 
 
