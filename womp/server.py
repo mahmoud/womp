@@ -1,5 +1,5 @@
 import os
-from clastic import Application, json_response, redirect
+from clastic import Application, json_response, redirect, Middleware
 from clastic.render.mako_templates import MakoRenderFactory
 from wapiti import WapitiClient
 from gevent import socket
@@ -13,6 +13,14 @@ import time
 ###
 DEFAULT_HOST = '0.0.0.0'
 DEFAULT_PORT = 1870
+
+class HTTPResponseStatusCorrector(Middleware):
+    def render(self, next, context):
+        status_code = context.get('code')
+        ret = next()
+        if status_code is not None:
+            ret.status_code = status_code
+        return ret
 
 
 def find_port(host=DEFAULT_HOST, start_port=DEFAULT_PORT, end_port=None):
@@ -38,7 +46,7 @@ def article_list():
 def start_fetch(listname, port):
     fm = FetchManager()  # include env
     fm.load_list(listname)
-    fm.run(port=port)
+    fm.fetch_list(listname, port=port)
     return fm.results
 
 
@@ -49,7 +57,7 @@ def fetch_controller(listname):
         tpool.spawn(start_fetch, listname, port)
         ret = {'port': port,
                'name': listname,
-               'url': 'http://localhost:' + str(port) + '/dashboard',
+               'url': 'http://localhost:' + str(port),
                'status': 'running'}
     else:
         ret = {'port': port,
@@ -72,20 +80,20 @@ def list_editor(listname):
     return ret
 
 
-def list_editor_submit(request):
+def list_editor_submit(listname, request):
     meta = request.values['meta'].lstrip('##')
-    listname = request.values['name']
     articles = [a.strip() for a in request.values['articles'].split('\n')]
     resolve = request.values.get('resolve')
     alm = ArticleListManager()
     alm.append_action(listname, meta, articles)
     if resolve:
         alm.resolve_the_unresolved(listname)
-    return redirect('/list_editor/' + listname)
+    return {
+        'success': True
+    }
 
 
-def list_editor_remove(request):
-    listname = request.values['_list_name']
+def list_editor_remove(listname, request):
     article_list = []
     for article_name in request.values.keys():
         if request.values[article_name] == 'remove' \
@@ -97,19 +105,53 @@ def list_editor_remove(request):
                   'source': 'http://en.wikipedia.org/w/api.php'})
     alm = ArticleListManager()
     alm.append_action(listname, meta, article_list)
-    return redirect('/list_editor/' + listname)
+    return {
+        'success': True
+    }
+
+def list_create(listname, request):
+    alm = ArticleListManager()
+    try:
+        alm.create(listname)
+        thelist = alm.load_list(listname)
+    except IOError as e:
+        return {
+            'error': str(e),
+            'code': 409
+        }
+    except ValueError as e:
+        return {
+            'error': str(e),
+            'code': 400
+        }
+
+    return {
+        'name': listname,
+        'articles': len(thelist._get_unresolved_articles()),
+        'actions': len(thelist.actions),
+        'date': thelist.file_metadata.get('date', 'new')
+    }
+
+def list_delete(listname, request):
+    alm = ArticleListManager()
+    alm.delete(listname)
+    return {
+        'success': True
+    }
 
 mako_render = MakoRenderFactory(os.path.join(os.getcwd(), 'templates'))
 routes = [('/start_fetch/<listname>', fetch_controller, json_response),
           ('/list_editor/<listname>', list_editor, 'list_editor.html'),
-          ('/list_editor/submit', list_editor_submit, json_response),
-          ('/list_editor/remove', list_editor_remove, json_response),
+          ('/list_edit/<listname>', list_editor_submit, json_response),
+          ('/list_prune/<listname>', list_editor_remove, json_response),
+          ('/list_create/<listname>', list_create, json_response),
+          ('/list_delete/<listname>', list_delete, json_response),
           ('/', article_list, 'index.html')]
 
 
 def main():
     static_path = os.path.join(os.getcwd(), 'templates', 'assets')
-    app = Application(routes, None, mako_render)
+    app = Application(routes, None, mako_render, [HTTPResponseStatusCorrector()])
     app.serve(static_prefix='static',
               static_path=static_path)
 
