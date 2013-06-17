@@ -197,7 +197,7 @@ class ArticleListManager(object):
 
     def create(self, target_list, **kw):
         existent = self.load_list(target_list)
-        if existent:
+        if existent is not None:
             raise IOError('list already exists: %s' % target_list)
         if not target_list or '.' in target_list:
             raise ValueError('expected non-empty string without dots')
@@ -205,6 +205,11 @@ class ArticleListManager(object):
         out_filename = os.path.join(self.output_path, target_list + DEFAULT_EXT)
         codecs.open(out_filename, 'w', encoding='utf-8').close()
         print 'Created article list %s' % out_filename
+
+    def delete(self, target_list, **kw):
+        thelist = self.load_list(target_list)
+        if thelist is not None:
+            os.remove(self._lookup_path(target_list))
 
     def write(self, target_list, list_name):
         # should write be on ArticleListManager
@@ -517,7 +522,7 @@ def main():
 def create_test():
     alm = ArticleListManager()
     try:
-        os.remove(alm._lookup_path(TEST_LIST_NAME))
+        alm.delete(TEST_LIST_NAME)
     except TypeError:
         pass
     alm.create(target_list=TEST_LIST_NAME)
